@@ -1,0 +1,17 @@
+{
+  "name": "Groky AI",
+  "short_name": "Groky",
+  "description": "Modern AI Chatbot & Coding platform powered by Groky AI with real-time streaming, HTML preview, document analysis, and free high-performance AI models.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF8F5",
+  "theme_color": "#D46238",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

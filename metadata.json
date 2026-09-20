@@ -1,0 +1,6 @@
+{
+  "name": "Groky AI",
+  "description": "Modern AI Chatbot & Coding platform powered by Groky AI with real-time streaming, HTML preview, document analysis, and free high-performance AI models.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

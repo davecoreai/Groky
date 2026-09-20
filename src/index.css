@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Fraunces', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+}
+
+.font-serif-editorial {
+  font-family: var(--font-serif);
+}
+
+.font-sans-clean {
+  font-family: var(--font-sans);
+}
+
+.font-mono-code {
+  font-family: var(--font-mono);
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 155, 145, 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 155, 145, 0.6);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 155, 0.25);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 140, 155, 0.45);
+}
+
+/* Ensure placeholder text is clearly visible across all browsers & devices */
+::placeholder {
+  color: #a8a29e !important;
+  opacity: 1 !important;
+}
+
+.dark ::placeholder {
+  color: #78716c !important;
+  opacity: 1 !important;
+}
+
