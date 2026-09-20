@@ -52,6 +52,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [fullscreenMedia, setFullscreenMedia] = useState<AttachedFile | null>(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -61,6 +62,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const isUserScrolledUpRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
   const scrollRafRef = useRef<number | null>(null);
+
+  // Dynamic Virtual Keyboard Height Adjustment for Mobile (lifts input box cleanly above keyboard)
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const vv = window.visualViewport;
+    const updateKeyboardOffset = () => {
+      // Calculate how much keyboard is occupying the window bottom
+      const offset = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
+      setKeyboardOffset(offset);
+      if (offset > 40) {
+        // Smooth scroll message container when keyboard expands
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        });
+      }
+    };
+
+    vv.addEventListener("resize", updateKeyboardOffset);
+    vv.addEventListener("scroll", updateKeyboardOffset);
+
+    return () => {
+      vv.removeEventListener("resize", updateKeyboardOffset);
+      vv.removeEventListener("scroll", updateKeyboardOffset);
+    };
+  }, []);
 
   // Monitor user scrolling to avoid jerking screen if user is reading previous code
   const handleContainerScroll = () => {
@@ -809,7 +836,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </div>
 
       {/* Floating Input Capsule (Claude-inspired minimal) */}
-      <div className="px-3 sm:px-6 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0">
+      <div
+        id="chat-input-wrapper"
+        style={{
+          paddingBottom:
+            keyboardOffset > 0
+              ? `${keyboardOffset + 10}px`
+              : "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
+          transition: "padding-bottom 0.12s cubic-bezier(0.16, 1, 0.3, 1)",
+        }}
+        className="px-3 sm:px-6 sm:pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0 z-20"
+      >
         <div className="max-w-3xl mx-auto">
           {/* Capsule Container: File preview is merged inside the placeholder container */}
           <div className="relative rounded-2xl border border-stone-300 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-md focus-within:border-amber-500/80 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all p-3.5 sm:p-4 pb-2.5 sm:pb-3">
@@ -875,6 +912,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => {
+                setTimeout(() => {
+                  messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                }, 200);
+              }}
               placeholder="Ask Groky AI"
               className="w-full bg-transparent text-sm sm:text-base text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 placeholder-stone-400 focus:outline-none resize-none font-sans-clean min-h-[56px] sm:min-h-[64px] max-h-48 leading-relaxed py-1.5"
             />

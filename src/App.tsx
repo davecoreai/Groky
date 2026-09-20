@@ -436,13 +436,25 @@ export default function App() {
       setConversations((prev) => {
         const nextConvs = prev.map((c) => {
           if (c.id === targetConvId) {
+            const hasText = Boolean(finalContent && finalContent.trim().length > 0);
             const updatedConv: Conversation = {
               ...c,
               messages: c.messages.map((m) =>
-                m.id === assistantMessageId ? { ...m, content: finalContent, isStreaming: false } : m
+                m.id === assistantMessageId
+                  ? {
+                      ...m,
+                      content: finalContent,
+                      isStreaming: false,
+                      error: hasText
+                        ? undefined
+                        : "Tidak ada respon yang diterima dari model AI. Silakan periksa pengaturan API key atau coba model lain.",
+                    }
+                  : m
               ),
             };
-            saveConversationToSupabase(updatedConv, settings).catch(() => {});
+            if (hasText) {
+              saveConversationToSupabase(updatedConv, settings).catch(() => {});
+            }
             return updatedConv;
           }
           return c;

@@ -171,9 +171,9 @@ Key Directives for Code & UI Generation:
 
     // 2. Fallback to Google Gemini
     const ai = getGenAI();
-    let fallbackModel = "gemini-3.8-flash";
-    if (model && model.includes("lite")) {
-      fallbackModel = "gemini-3.1-flash-lite";
+    let fallbackModel = "gemini-2.5-flash";
+    if (model && model.includes("pro")) {
+      fallbackModel = "gemini-2.5-pro";
     }
 
     const contents: any[] = [];

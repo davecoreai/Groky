@@ -404,9 +404,9 @@ Key Directives for Code & UI Generation:
     // 2. High-Speed Fallback Engine (Immediate ultra-fast low TTFT)
     const ai = getGenAI();
 
-    let fallbackModel = "gemini-3.8-flash"; // Fast, resilient Gemini 3.8 Flash model
-    if (model.includes("lite")) {
-      fallbackModel = "gemini-3.1-flash-lite";
+    let fallbackModel = "gemini-2.5-flash"; // Ultra-fast, highly reliable 1M context Gemini 2.5 Flash
+    if (model.includes("pro")) {
+      fallbackModel = "gemini-2.5-pro";
     }
 
     const contents: any[] = [];
