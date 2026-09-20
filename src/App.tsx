@@ -10,6 +10,7 @@ import {
   removeMemoryItem,
   clearDeviceMemory,
   getFormattedDeviceMemoryContext,
+  applyAppFont,
 } from "./lib/storage";
 import {
   getSupabaseClient,
@@ -18,7 +19,7 @@ import {
   deleteConversationFromSupabase,
   logDeviceVisitorToSupabase,
 } from "./lib/supabase";
-import { Conversation, Message, AttachedFile, UserSettings, Artifact, MemoryItem } from "./types";
+import { Conversation, Message, AttachedFile, UserSettings, Artifact, MemoryItem, UserAuth } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { ArtifactViewer } from "./components/ArtifactViewer";
@@ -27,6 +28,8 @@ import { SchemaDocsModal } from "./components/SchemaDocsModal";
 import { DocumentPreviewModal } from "./components/DocumentPreviewModal";
 import { LandingPage } from "./components/LandingPage";
 import { DeviceMemoryModal } from "./components/DeviceMemoryModal";
+import { Settings } from "./components/Settings";
+import { AuthPage } from "./components/AuthPage";
 
 // Helper to extract clean conversation topic title from user prompt
 function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
@@ -94,21 +97,25 @@ export default function App() {
     return conversations[0]?.id || `conv-${Date.now()}`;
   });
 
-  const [settings, setSettings] = useState<UserSettings>(loadSettings);
-  const [viewMode, setViewMode] = useState<"landing" | "chat">((): "landing" | "chat" => {
+  const [userAuth, setUserAuth] = useState<UserAuth | null>(() => {
     try {
       if (typeof window !== "undefined") {
-        const hasVisited = localStorage.getItem("groky_has_visited");
-        if (hasVisited === "true") {
-          const savedMode = localStorage.getItem("groky_last_view_mode");
-          return (savedMode as "landing" | "chat") || "chat";
-        }
+        const saved = localStorage.getItem("groky_user_auth");
+        if (saved) return JSON.parse(saved);
       }
-    } catch {
-      // Fallback
-    }
-    return "landing";
+    } catch {}
+    return null;
   });
+
+  const [settings, setSettings] = useState<UserSettings>(loadSettings);
+  const [viewMode, setViewMode] = useState<"landing" | "auth" | "chat" | "settings">("landing");
+
+  // Apply UI font on mount & setting change
+  useEffect(() => {
+    if (settings.selectedFont) {
+      applyAppFont(settings.selectedFont);
+    }
+  }, [settings.selectedFont]);
 
   // Automatically save viewMode state and visited flag to localStorage
   useEffect(() => {
@@ -141,6 +148,22 @@ export default function App() {
   const textBufferQueueRef = useRef<string[]>([]);
   const currentAccumulatedTextRef = useRef<string>("");
 
+  // Fetch Supabase configuration from backend and sync it to settings
+  useEffect(() => {
+    fetch("/api/config/supabase")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.isConfigured && data.supabaseUrl && data.supabaseAnonKey) {
+          setSettings((prev) => ({
+            ...prev,
+            supabaseUrl: data.supabaseUrl,
+            supabaseAnonKey: data.supabaseAnonKey,
+          }));
+        }
+      })
+      .catch((err) => console.warn("Error loading Supabase configuration from backend:", err));
+  }, []);
+
   // Initialize Supabase if configured
   useEffect(() => {
     if (settings.supabaseUrl && settings.supabaseAnonKey) {
@@ -161,6 +184,64 @@ export default function App() {
         .catch((err) => console.log("Supabase initial sync:", err));
     }
   }, [settings.supabaseUrl, settings.supabaseAnonKey, activeId, settings]);
+
+  // Global Supabase auth state change and session sync listener
+  useEffect(() => {
+    const client = getSupabaseClient(settings);
+    if (!client) return;
+
+    // Check existing active session (e.g. after Google OAuth redirect)
+    client.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const userName = session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User";
+        const avatar = session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(session.user.email || "")}`;
+        const provider = session.user.app_metadata?.provider || "google";
+        const authObj: UserAuth = {
+          isLoggedIn: true,
+          name: userName,
+          email: session.user.email || "",
+          avatarUrl: avatar,
+          provider: provider as "google" | "email",
+        };
+        setUserAuth(authObj);
+        try {
+          localStorage.setItem("groky_user_auth", JSON.stringify(authObj));
+        } catch {}
+        setViewMode("chat");
+      }
+    });
+
+    // Listen to real-time auth events
+    const { data: authListener } = client.auth.onAuthStateChange((event, session) => {
+      if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
+        const userName = session.user.user_metadata?.name || session.user.email?.split("@")[0] || "User";
+        const avatar = session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(session.user.email || "")}`;
+        const provider = session.user.app_metadata?.provider || "google";
+        const authObj: UserAuth = {
+          isLoggedIn: true,
+          name: userName,
+          email: session.user.email || "",
+          avatarUrl: avatar,
+          provider: provider as "google" | "email",
+        };
+        setUserAuth(authObj);
+        try {
+          localStorage.setItem("groky_user_auth", JSON.stringify(authObj));
+        } catch {}
+        setViewMode("chat");
+      } else if (event === "SIGNED_OUT") {
+        setUserAuth(null);
+        try {
+          localStorage.removeItem("groky_user_auth");
+        } catch {}
+        setViewMode("landing");
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [settings]);
 
   // Responsive mobile detector & visual viewport sync for mobile keyboard
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -464,9 +545,21 @@ export default function App() {
         }));
 
       const memoryCtx = getFormattedDeviceMemoryContext();
-      const fullPromptWithMemory = memoryCtx
-        ? `${settings.systemPrompt}\n\n[Persistent Device Memory (Facts & preferences for this device)]:\n${memoryCtx}`
-        : settings.systemPrompt;
+      let fullSystemPrompt = settings.systemPrompt;
+
+      if (memoryCtx) {
+        fullSystemPrompt += `\n\n[Persistent Device Memory (Facts & preferences for this device)]:\n${memoryCtx}`;
+      }
+
+      if (settings.toneStyle === "Ramah") {
+        fullSystemPrompt += "\n\n[Gaya & Nada Bicara AI]: Berbicaralah dengan nada yang sangat ramah, hangat, sopan, dan penuh empati serta dalam Bahasa Indonesia yang komunikatif.";
+      } else if (settings.toneStyle === "Profesional") {
+        fullSystemPrompt += "\n\n[Gaya & Nada Bicara AI]: Berbicaralah dengan nada formal, profesional, lugas, ringkas, terstruktur, dan menggunakan Bahasa Indonesia yang baik dan benar.";
+      }
+
+      if (settings.customInstructions && settings.customInstructions.trim()) {
+        fullSystemPrompt += `\n\n[Instruksi Khusus dari Pengguna]:\n${settings.customInstructions.trim()}`;
+      }
 
       const res = await fetch("/api/chat/stream", {
         method: "POST",
@@ -475,7 +568,7 @@ export default function App() {
         body: JSON.stringify({
           messages: payloadMessages,
           model: targetModelId,
-          systemPrompt: fullPromptWithMemory,
+          systemPrompt: fullSystemPrompt,
           temperature: settings.temperature,
           files,
           customConfig: {
@@ -661,9 +754,39 @@ export default function App() {
   if (viewMode === "landing") {
     return (
       <LandingPage
-        onStartChat={() => setViewMode("chat")}
+        onStartChat={() => setViewMode("auth")}
+        onOpenAuth={() => setViewMode("auth")}
         isDark={isDark}
         onToggleTheme={handleToggleTheme}
+      />
+    );
+  }
+
+  if (viewMode === "auth") {
+    return (
+      <AuthPage
+        onSuccessAuth={(user) => {
+          setUserAuth(user);
+          try {
+            localStorage.setItem("groky_user_auth", JSON.stringify(user));
+          } catch {}
+          setViewMode("chat");
+        }}
+        onBackToLanding={() => setViewMode("landing")}
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+        settings={settings}
+        onUpdateSettings={handleSaveSettings}
+      />
+    );
+  }
+
+  if (viewMode === "settings") {
+    return (
+      <Settings
+        settings={settings}
+        onUpdateSettings={handleSaveSettings}
+        onClose={() => setViewMode("chat")}
       />
     );
   }
@@ -701,6 +824,15 @@ export default function App() {
         isMobile={isMobile}
         onOpenLanding={() => setViewMode("landing")}
         onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
+        onOpenSettings={() => setViewMode("settings")}
+        userAuth={userAuth}
+        onLogout={() => {
+          setUserAuth(null);
+          try {
+            localStorage.removeItem("groky_user_auth");
+          } catch {}
+        }}
+        onOpenAuth={() => setViewMode("auth")}
       />
 
       {/* Central Chat Arena (Minimalist Claude design) */}

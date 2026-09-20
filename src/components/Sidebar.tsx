@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Conversation } from "../types";
+import { Conversation, UserAuth } from "../types";
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -14,6 +14,10 @@ interface SidebarProps {
   isMobile: boolean;
   onOpenLanding?: () => void;
   onOpenDeviceMemory?: () => void;
+  onOpenSettings?: () => void;
+  userAuth?: UserAuth | null;
+  onLogout?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,6 +32,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobile,
   onOpenLanding,
   onOpenDeviceMemory,
+  onOpenSettings,
+  userAuth,
+  onLogout,
+  onOpenAuth,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -195,6 +203,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }
           return historyConvs.map((conv) => renderConversationItem(conv));
         })()}
+      </div>
+
+      {/* Footer: User Profile & Settings */}
+      <div className="p-3 border-t border-stone-200/60 dark:border-stone-800/60 space-y-1">
+        {userAuth?.isLoggedIn ? (
+          <div className="flex items-center justify-between p-2 rounded-xl bg-stone-100/80 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-800/80">
+            <div className="flex items-center gap-2 min-w-0">
+              <img
+                src={userAuth.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"}
+                alt={userAuth.name || "User"}
+                className="w-7 h-7 rounded-full object-cover bg-stone-200 shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-stone-800 dark:text-stone-200 truncate">
+                  {userAuth.name || "Pengguna"}
+                </div>
+                <div className="text-[10px] text-stone-500 dark:text-stone-400 truncate">
+                  {userAuth.email}
+                </div>
+              </div>
+            </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Keluar (Logout)"
+                className="p-1.5 rounded-lg text-stone-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-stone-200/50 dark:hover:bg-stone-700/50 transition-colors text-xs cursor-pointer shrink-0"
+              >
+                <i className="fa-solid fa-right-from-bracket"></i>
+              </button>
+            )}
+          </div>
+        ) : (
+          onOpenAuth && (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl bg-amber-600/10 text-amber-700 dark:text-amber-400 hover:bg-amber-600/20 transition-colors text-xs font-semibold cursor-pointer"
+            >
+              <i className="fa-solid fa-user-plus text-xs shrink-0"></i>
+              <span className="truncate">Masuk / Daftar Akun</span>
+            </button>
+          )
+        )}
+
+        <button
+          onClick={onOpenSettings}
+          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-stone-700 dark:text-stone-300 hover:bg-stone-200/60 dark:hover:bg-stone-800/60 transition-colors text-xs font-medium cursor-pointer group"
+        >
+          <i className="fa-solid fa-gear text-stone-500 dark:text-stone-400 group-hover:rotate-45 transition-transform duration-200 text-sm shrink-0"></i>
+          <span className="truncate">Settings</span>
+        </button>
       </div>
     </div>
   );

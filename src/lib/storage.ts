@@ -36,10 +36,10 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "z-ai/glm-5.2:free",
     name: "Groky 5.2 Astra",
     provider: "Groky Cloud",
-    badge: "Super 2jt",
-    description: "Model unggulan dengan penalaran kompleks, analisis dokumen mendalam, dan arsitektur software skala besar (Eksklusif Paket Super Rp 2jt/Bulan).",
+    badge: "",
+    description: "Model unggulan dengan penalaran kompleks, analisis dokumen mendalam, dan arsitektur software skala besar.",
     maxTokens: 131072,
-    isLocked: true,
+    isLocked: false,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -47,10 +47,10 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "google/gemma-4-31b-it:free",
     name: "Groky 4 Super",
     provider: "Groky Cloud",
-    badge: "Plus & Super",
+    badge: "Beta",
     description: "Optimal untuk pemrosesan pemrograman tingkat lanjut, refactoring skrip, dan logika algoritma.",
     maxTokens: 131072,
-    isLocked: true,
+    isLocked: false,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -58,10 +58,10 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "google/gemma-4-26b-a4b-it:free",
     name: "Groky 3.7 Flow",
     provider: "Groky Cloud",
-    badge: "Plus & Super",
+    badge: "Beta",
     description: "Dioptimalkan untuk pembuatan komponen antarmuka interaktif, visualisasi data, dan alur agen.",
     maxTokens: 131072,
-    isLocked: true,
+    isLocked: false,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -69,7 +69,7 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "inclusionai/ling-3.0-flash-fin:free",
     name: "Groky 2.5 Flash",
     provider: "Groky Cloud",
-    badge: "Gratis",
+    badge: "",
     description: "Respon cepat berlatensi rendah untuk percakapan umum, tanya-jawab harian, dan ringkasan kilat.",
     maxTokens: 131072,
     isLocked: false,
@@ -80,7 +80,7 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "nvidia/nemotron-3-ultra-550b-a55b:free",
     name: "Groky 3.5 Flash",
     provider: "Groky Cloud",
-    badge: "Gratis",
+    badge: "",
     description: "Model serbaguna untuk pemrosesan teks terstruktur, logika matematika, dan penulisan dokumen.",
     maxTokens: 131072,
     isLocked: false,
@@ -88,6 +88,60 @@ export const DEFAULT_MODELS: ModelOption[] = [
     supportsCodeArtifacts: true,
   },
 ];
+
+export const AVAILABLE_FONTS = [
+  { id: "Plus Jakarta Sans", name: "Plus Jakarta Sans", category: "Sans-Serif" },
+  { id: "Inter", name: "Inter", category: "Sans-Serif" },
+  { id: "Outfit", name: "Outfit", category: "Sans-Serif" },
+  { id: "Poppins", name: "Poppins", category: "Sans-Serif" },
+  { id: "Roboto", name: "Roboto", category: "Sans-Serif" },
+  { id: "Open Sans", name: "Open Sans", category: "Sans-Serif" },
+  { id: "Montserrat", name: "Montserrat", category: "Sans-Serif" },
+  { id: "Lato", name: "Lato", category: "Sans-Serif" },
+  { id: "Work Sans", name: "Work Sans", category: "Sans-Serif" },
+  { id: "DM Sans", name: "DM Sans", category: "Sans-Serif" },
+  { id: "Space Grotesk", name: "Space Grotesk", category: "Tech" },
+  { id: "Playfair Display", name: "Playfair Display", category: "Serif" },
+  { id: "Lora", name: "Lora", category: "Serif" },
+  { id: "Merriweather", name: "Merriweather", category: "Serif" },
+  { id: "JetBrains Mono", name: "JetBrains Mono", category: "Monospace" },
+  { id: "Fira Code", name: "Fira Code", category: "Monospace" },
+  { id: "Cinzel", name: "Cinzel", category: "Display" },
+  { id: "Cabinet Grotesk", name: "Cabinet Grotesk", category: "Sans-Serif" },
+  { id: "Sora", name: "Sora", category: "Sans-Serif" },
+  { id: "Manrope", name: "Manrope", category: "Sans-Serif" },
+];
+
+export function applyAppFont(fontName: string) {
+  if (typeof window === "undefined") return;
+  const targetFont = fontName || "Plus Jakarta Sans";
+  
+  // Inject Google Font link dynamically if needed
+  if (targetFont !== "Plus Jakarta Sans") {
+    const linkId = `google-font-${targetFont.replace(/\s+/g, "-").toLowerCase()}`;
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement("link");
+      link.id = linkId;
+      link.rel = "stylesheet";
+      const formattedFont = targetFont.replace(/\s+/g, "+");
+      link.href = `https://fonts.googleapis.com/css2?family=${formattedFont}:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap`;
+      document.head.appendChild(link);
+    }
+  }
+
+  const fontStack = `'${targetFont}', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+
+  // Set CSS Custom Properties on root, body, and root elements
+  document.documentElement.style.setProperty("--font-sans", fontStack);
+  document.documentElement.style.setProperty("--font-serif", fontStack);
+  document.documentElement.style.fontFamily = fontStack;
+  document.body.style.fontFamily = fontStack;
+
+  const appRoot = document.getElementById("root");
+  if (appRoot) {
+    appRoot.style.fontFamily = fontStack;
+  }
+}
 
 export const DEFAULT_SETTINGS: UserSettings = {
   preferredModel: "inclusionai/ling-3.0-flash-fin:free",
@@ -102,10 +156,13 @@ export const DEFAULT_SETTINGS: UserSettings = {
   supabaseAnonKey: "",
   customEndpoint: "",
   customApiKey: "",
+  toneStyle: "Default",
+  customInstructions: "",
+  selectedFont: "Plus Jakarta Sans",
 };
 
 const INITIAL_CONVERSATION: Conversation = {
-  id: "conv-welcome-demo",
+  id: "conv-welcome-init",
   title: "Introduction to Groky AI & Interactive Artifacts",
   createdAt: Date.now() - 3600000,
   updatedAt: Date.now() - 3600000,
@@ -329,9 +386,9 @@ export function saveConversations(conversations: Conversation[]): void {
 export function loadActiveChatId(): string {
   try {
     const keys = getStorageKeys();
-    return localStorage.getItem(keys.ACTIVE_ID) || "conv-welcome-demo";
+    return localStorage.getItem(keys.ACTIVE_ID) || "conv-welcome-init";
   } catch {
-    return "conv-welcome-demo";
+    return "conv-welcome-init";
   }
 }
 

@@ -4,13 +4,16 @@ import { ParticleBackground } from "./ParticleBackground";
 
 interface LandingPageProps {
   onStartChat: () => void;
+  onOpenAuth: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onStartChat,
+  onOpenAuth,
   isDark,
+  onToggleTheme,
 }) => {
   const [selectedPlanModal, setSelectedPlanModal] = useState<{
     name: string;
@@ -248,6 +251,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               FAQ
             </button>
           </nav>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenAuth}
+              className="hidden md:inline-flex px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer items-center gap-2"
+            >
+              <i className="fa-solid fa-right-to-bracket text-xs"></i>
+              <span>Masuk / Daftar</span>
+            </button>
+            <button
+              onClick={onToggleTheme}
+              className="w-9 h-9 rounded-xl bg-stone-200/60 dark:bg-stone-800/60 text-stone-600 dark:text-stone-300 hover:text-amber-500 transition-colors cursor-pointer flex items-center justify-center"
+              title="Toggle Theme"
+            >
+              <i className={`fa-solid ${isDark ? "fa-sun text-amber-400" : "fa-moon"}`}></i>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -272,7 +292,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
             <button
-              onClick={onStartChat}
+              onClick={onOpenAuth}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm shadow-md transition-all cursor-pointer hover:scale-[1.01]"
             >
               <i className="fa-solid fa-sparkles text-xs"></i>

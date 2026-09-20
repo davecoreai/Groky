@@ -632,10 +632,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   referrerPolicy="no-referrer"
                 />
               </div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-medium">
-                <i className="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
-                <span>Groky AI Assistant</span>
-              </div>
               <h1 className="font-serif-editorial text-3xl sm:text-4xl lg:text-5xl font-normal tracking-tight text-stone-900 dark:text-stone-100">
                 {getClaudeGreeting()}, how can Groky help today?
               </h1>
@@ -644,25 +640,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </p>
             </div>
 
-            {/* Claude-style Starter Suggestion Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left max-w-xl mx-auto">
+            {/* Starter Suggestion Pills */}
+            <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl mx-auto pt-2">
               {STARTER_PROMPTS.map((item, idx) => (
                 <button
                   key={idx}
                   onClick={() => onSendMessage(item.prompt, [])}
-                  className="p-3.5 rounded-2xl border border-stone-200/90 dark:border-stone-800 bg-white/70 dark:bg-stone-900/70 hover:border-amber-500/70 hover:bg-stone-50 dark:hover:bg-stone-800/80 transition-all text-left shadow-2xs group cursor-pointer"
+                  className="flex items-center gap-2.5 px-4 py-2 rounded-full border border-stone-200/90 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 hover:border-amber-500/70 hover:bg-amber-500/5 dark:hover:bg-stone-800/80 transition-all text-left shadow-2xs group cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                      <i className={`${item.icon} text-xs`}></i>
-                    </div>
-                    <div className="text-xs font-semibold text-stone-800 dark:text-stone-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                      {item.title}
-                    </div>
+                  <div className="w-6 h-6 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <i className={`${item.icon} text-[11px]`}></i>
                   </div>
-                  <div className="text-[11px] text-stone-400 mt-2 pl-9 line-clamp-2 leading-normal">
-                    {item.subtitle}
-                  </div>
+                  <span className="text-xs font-medium text-stone-800 dark:text-stone-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                    {item.title}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1008,6 +999,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </div>
             </div>
           </div>
+          {/* Disclaimer Text below Textarea */}
+          <p className="text-[11px] text-stone-400 dark:text-stone-500 font-medium text-center mt-2">
+            Groky can make mistakes. Please verify important information.
+          </p>
         </div>
       </div>
 

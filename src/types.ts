@@ -79,10 +79,21 @@ export interface UserSettings {
   supabaseAnonKey?: string;
   customEndpoint?: string;
   customApiKey?: string;
+  toneStyle?: "Default" | "Ramah" | "Profesional";
+  customInstructions?: string;
+  selectedFont?: string;
 }
 
 export interface RateLimitStatus {
   limit: number;
   remaining: number;
   resetSeconds: number;
+}
+
+export interface UserAuth {
+  isLoggedIn: boolean;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+  provider?: "google" | "email";
 }

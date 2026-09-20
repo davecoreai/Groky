@@ -61,15 +61,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               <i className="fa-solid fa-lock text-[10px] text-amber-500" title="Model Terkunci"></i>
             )}
             {selectedModel.badge && (
-              <span
-                className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-md ${
-                  selectedModel.isLocked || selectedModel.badge.includes("2jt") || selectedModel.badge.includes("Super")
-                    ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                    : selectedModel.badge.includes("Plus")
-                    ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
-                    : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                }`}
-              >
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-mono uppercase">
                 {selectedModel.badge}
               </span>
             )}
@@ -85,9 +77,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           <div className="absolute left-0 bottom-full mb-2 w-72 sm:w-80 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 shadow-xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-stone-400 uppercase tracking-wider border-b border-stone-100 dark:border-stone-800">
               <span>Groky AI Engines</span>
-              <span className="text-[9px] text-amber-600 dark:text-amber-400 normal-case flex items-center gap-1">
-                <i className="fa-solid fa-lock text-[9px]"></i> Premium Locked
-              </span>
             </div>
             <div className="space-y-0.5 pt-1">
               {models.map((model) => {
@@ -128,15 +117,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             {model.name}
                           </span>
                           {model.badge && (
-                            <span
-                              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-md ${
-                                isLocked || model.badge.includes("2jt") || model.badge.includes("Super")
-                                  ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                                  : model.badge.includes("Plus")
-                                  ? "bg-blue-500/15 text-blue-700 dark:text-blue-300"
-                                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                              }`}
-                            >
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-mono uppercase">
                               {model.badge}
                             </span>
                           )}

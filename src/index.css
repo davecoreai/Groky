@@ -20,10 +20,15 @@
   font-family: var(--font-mono);
 }
 
-/* Custom subtle scrollbar */
+/* Transparent scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -31,20 +36,17 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(160, 155, 145, 0.35);
+  background: transparent;
   border-radius: 9999px;
+  transition: background 0.2s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(160, 155, 145, 0.6);
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(160, 155, 145, 0.15);
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(140, 140, 155, 0.25);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(140, 140, 155, 0.45);
+.dark *:hover::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 155, 0.15);
 }
 
 /* Ensure placeholder text is clearly visible across all browsers & devices */
