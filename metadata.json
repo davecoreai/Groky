@@ -1,6 +1,6 @@
 {
   "name": "Groky AI",
-  "description": "Modern AI Chatbot & Coding platform powered by Groky AI with real-time streaming, HTML preview, document analysis, and free high-performance AI models.",
+  "description": "Groky is a powerful and intelligent AI assistant designed to help you explore ideas, find information, create content, solve problems, and improve your everyday productivity. With advanced artificial intelligence technology, Groky provides a simple and intuitive experience for users who want a smarter way to interact with AI.\n\nWhether you need help answering questions, writing and improving content, brainstorming ideas, understanding complex topics, learning new things, generating creative concepts, or completing everyday tasks, Groky is built to assist you quickly and efficiently. Its modern interface makes AI accessible, easy to use, and suitable for a wide range of personal, educational, creative, and productivity-focused needs.\n\nGroky combines intelligent AI capabilities with a user-friendly experience to help you work smarter, think creatively, and accomplish more. Discover a new way to interact with artificial intelligence with Groky — your smart AI assistant for knowledge, creativity, productivity, and everyday tasks.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

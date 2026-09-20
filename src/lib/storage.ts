@@ -1,4 +1,4 @@
-import { Conversation, UserSettings, ModelOption } from "../types";
+import { Conversation, UserSettings, ModelOption, MemoryItem } from "../types";
 
 const STORAGE_KEYS = {
   CONVERSATIONS: "groky_conversations_v3",
@@ -7,14 +7,39 @@ const STORAGE_KEYS = {
   THEME: "groky_theme_mode_v3",
 };
 
+export function getDeviceId(): string {
+  if (typeof window === "undefined") return "dev_server";
+  try {
+    let id = localStorage.getItem("groky_device_id");
+    if (!id) {
+      id = "dev_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 8);
+      localStorage.setItem("groky_device_id", id);
+    }
+    return id;
+  } catch {
+    return "dev_default";
+  }
+}
+
+function getStorageKeys() {
+  const devId = getDeviceId();
+  return {
+    CONVERSATIONS: `groky_conversations_${devId}`,
+    ACTIVE_ID: `groky_active_chat_id_${devId}`,
+    SETTINGS: `groky_user_settings_${devId}`,
+    THEME: `groky_theme_mode_${devId}`,
+  };
+}
+
 export const DEFAULT_MODELS: ModelOption[] = [
   {
     id: "z-ai/glm-5.2:free",
     name: "Groky 5.2 Astra",
     provider: "Groky Cloud",
-    badge: "Free",
-    description: "Flagship high-intelligence reasoning and coding model with deep analytical prowess.",
+    badge: "Super 2jt",
+    description: "Model unggulan dengan penalaran kompleks, analisis dokumen mendalam, dan arsitektur software skala besar (Eksklusif Paket Super Rp 2jt/Bulan).",
     maxTokens: 131072,
+    isLocked: true,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -22,9 +47,10 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "google/gemma-4-31b-it:free",
     name: "Groky 4 Super",
     provider: "Groky Cloud",
-    badge: "Beta",
-    description: "High-tier reasoning, deep coding, and complex knowledge synthesis.",
+    badge: "Plus & Super",
+    description: "Optimal untuk pemrosesan pemrograman tingkat lanjut, refactoring skrip, dan logika algoritma.",
     maxTokens: 131072,
+    isLocked: true,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -32,9 +58,10 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "google/gemma-4-26b-a4b-it:free",
     name: "Groky 3.7 Flow",
     provider: "Groky Cloud",
-    badge: "Beta",
-    description: "Dynamic agentic flow and ultra-responsive coding architecture.",
+    badge: "Plus & Super",
+    description: "Dioptimalkan untuk pembuatan komponen antarmuka interaktif, visualisasi data, dan alur agen.",
     maxTokens: 131072,
+    isLocked: true,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -42,9 +69,10 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "inclusionai/ling-3.0-flash-fin:free",
     name: "Groky 2.5 Flash",
     provider: "Groky Cloud",
-    badge: "Free",
-    description: "Lightning-fast real-time streaming model optimized for instant response and coding speed.",
+    badge: "Gratis",
+    description: "Respon cepat berlatensi rendah untuk percakapan umum, tanya-jawab harian, dan ringkasan kilat.",
     maxTokens: 131072,
+    isLocked: false,
     supportsVision: true,
     supportsCodeArtifacts: true,
   },
@@ -52,19 +80,20 @@ export const DEFAULT_MODELS: ModelOption[] = [
     id: "nvidia/nemotron-3-ultra-550b-a55b:free",
     name: "Groky 3.5 Flash",
     provider: "Groky Cloud",
-    badge: "Free",
-    description: "High-capacity reasoning architecture for complex logic and software design.",
+    badge: "Gratis",
+    description: "Model serbaguna untuk pemrosesan teks terstruktur, logika matematika, dan penulisan dokumen.",
     maxTokens: 131072,
+    isLocked: false,
     supportsVision: false,
     supportsCodeArtifacts: true,
   },
 ];
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  preferredModel: "z-ai/glm-5.2:free",
+  preferredModel: "inclusionai/ling-3.0-flash-fin:free",
   theme: "system",
   temperature: 0.7,
-  systemPrompt: "You are Groky AI, an exceptionally intelligent, helpful, and versatile AI Chatbot & Coding Assistant. Provide clean, production-ready code and lucid explanations.",
+  systemPrompt: "You are Groky AI, an exceptionally intelligent AI Chatbot & Coding Assistant. When creating websites, web apps, or UI code, strictly do NOT use emojis anywhere in the code or interface, and always maintain clean, neat, highly-structured, and immaculate layouts.",
   enable3DBackground: false,
   autoOpenArtifacts: false,
   codeFontSize: 13,
@@ -81,7 +110,7 @@ const INITIAL_CONVERSATION: Conversation = {
   createdAt: Date.now() - 3600000,
   updatedAt: Date.now() - 3600000,
   isPinned: false,
-  modelId: "z-ai/glm-5.2:free",
+  modelId: "inclusionai/ling-3.0-flash-fin:free",
   messages: [
     {
       id: "msg-1",
@@ -92,7 +121,7 @@ const INITIAL_CONVERSATION: Conversation = {
     {
       id: "msg-2",
       role: "assistant",
-      model: "z-ai/glm-5.2:free",
+      model: "inclusionai/ling-3.0-flash-fin:free",
       content: `Welcome to **Groky AI** — an advanced, editorial AI Chatbot and 3D Coding environment crafted with aesthetic warmth, fluid streaming, and architectural rigor.
 
 ### Architectural Highlights
@@ -267,10 +296,17 @@ Feel free to ask questions, request 3D components, or upload files for analysis!
 
 export function loadConversations(): Conversation[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CONVERSATIONS);
+    const keys = getStorageKeys();
+    const raw = localStorage.getItem(keys.CONVERSATIONS);
     if (!raw) {
-      const initial = [INITIAL_CONVERSATION];
-      localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(initial));
+      const devId = getDeviceId();
+      const deviceInitialConv: Conversation = {
+        ...INITIAL_CONVERSATION,
+        id: `conv-${devId}-${Date.now().toString(36)}`,
+        modelId: "inclusionai/ling-3.0-flash-fin:free",
+      };
+      const initial = [deviceInitialConv];
+      localStorage.setItem(keys.CONVERSATIONS, JSON.stringify(initial));
       return initial;
     }
     const parsed = JSON.parse(raw);
@@ -283,7 +319,8 @@ export function loadConversations(): Conversation[] {
 
 export function saveConversations(conversations: Conversation[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.CONVERSATIONS, JSON.stringify(conversations));
+    const keys = getStorageKeys();
+    localStorage.setItem(keys.CONVERSATIONS, JSON.stringify(conversations));
   } catch (err) {
     console.error("Failed to save conversations", err);
   }
@@ -291,7 +328,8 @@ export function saveConversations(conversations: Conversation[]): void {
 
 export function loadActiveChatId(): string {
   try {
-    return localStorage.getItem(STORAGE_KEYS.ACTIVE_ID) || "conv-welcome-demo";
+    const keys = getStorageKeys();
+    return localStorage.getItem(keys.ACTIVE_ID) || "conv-welcome-demo";
   } catch {
     return "conv-welcome-demo";
   }
@@ -299,7 +337,8 @@ export function loadActiveChatId(): string {
 
 export function saveActiveChatId(id: string): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_ID, id);
+    const keys = getStorageKeys();
+    localStorage.setItem(keys.ACTIVE_ID, id);
   } catch (err) {
     console.error("Failed to save active chat ID", err);
   }
@@ -307,7 +346,8 @@ export function saveActiveChatId(id: string): void {
 
 export function loadSettings(): UserSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const keys = getStorageKeys();
+    const raw = localStorage.getItem(keys.SETTINGS);
     if (!raw) return DEFAULT_SETTINGS;
     return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
   } catch {
@@ -317,8 +357,77 @@ export function loadSettings(): UserSettings {
 
 export function saveSettings(settings: UserSettings): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    const keys = getStorageKeys();
+    localStorage.setItem(keys.SETTINGS, JSON.stringify(settings));
   } catch (err) {
     console.error("Failed to save settings", err);
   }
+}
+
+// Device Memory Management (Per-Device Persistence)
+export function getDeviceMemoryKey(): string {
+  const devId = getDeviceId();
+  return `groky_device_memory_${devId}`;
+}
+
+export function loadDeviceMemory(): MemoryItem[] {
+  try {
+    const key = getDeviceMemoryKey();
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeviceMemory(items: MemoryItem[]): void {
+  try {
+    const key = getDeviceMemoryKey();
+    localStorage.setItem(key, JSON.stringify(items));
+  } catch (err) {
+    console.error("Failed to save device memory", err);
+  }
+}
+
+export function addMemoryItem(key: string, value: string): MemoryItem[] {
+  const current = loadDeviceMemory();
+  const existingIdx = current.findIndex((m) => m.key.toLowerCase() === key.toLowerCase());
+  const newItem: MemoryItem = {
+    id: `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    key: key.trim(),
+    value: value.trim(),
+    updatedAt: Date.now(),
+  };
+
+  let updated: MemoryItem[];
+  if (existingIdx >= 0) {
+    updated = [...current];
+    updated[existingIdx] = newItem;
+  } else {
+    updated = [newItem, ...current];
+  }
+  saveDeviceMemory(updated);
+  return updated;
+}
+
+export function removeMemoryItem(id: string): MemoryItem[] {
+  const current = loadDeviceMemory();
+  const updated = current.filter((m) => m.id !== id);
+  saveDeviceMemory(updated);
+  return updated;
+}
+
+export function clearDeviceMemory(): void {
+  try {
+    const key = getDeviceMemoryKey();
+    localStorage.removeItem(key);
+  } catch {}
+}
+
+export function getFormattedDeviceMemoryContext(): string {
+  const items = loadDeviceMemory();
+  if (items.length === 0) return "";
+  return items.map((m) => `- ${m.key}: ${m.value}`).join("\n");
 }

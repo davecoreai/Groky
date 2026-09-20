@@ -192,10 +192,51 @@ async function executeStreamWithFallback({
   return modelUsed;
 }
 
+// Visitor Device & IP Logger to Supabase endpoint
+apiRouter.post("/visitor-log", async (req: Request, res: Response) => {
+  try {
+    const rawIp =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress ||
+      "127.0.0.1";
+    const ipAddress =
+      rawIp === "::1" || rawIp === "::ffff:127.0.0.1" ? "127.0.0.1" : rawIp;
+    const { deviceName, userAgent } = req.body;
+
+    const supabaseUrl =
+      process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey =
+      process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+    if (supabaseUrl && supabaseAnonKey) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        await supabase.from("device_logs").insert([
+          {
+            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            device_name: deviceName || "Unknown Device",
+            ip_address: ipAddress,
+            user_agent: userAgent || "",
+            created_at: Date.now(),
+          },
+        ]);
+      } catch (dbErr: any) {
+        console.warn("Server Supabase device log notice:", dbErr?.message);
+      }
+    }
+
+    res.json({ success: true, ip: ipAddress, deviceName: deviceName || "Unknown Device" });
+  } catch (err: any) {
+    console.warn("Visitor log error:", err?.message);
+    res.status(500).json({ error: err?.message || "Failed to log visitor device" });
+  }
+});
+
 // Available Models (User Specified Free Models)
 apiRouter.get("/models", (_req: Request, res: Response) => {
   res.json({
-    defaultModel: "z-ai/glm-5.2:free",
+    defaultModel: "inclusionai/ling-3.0-flash-fin:free",
     openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
     supabaseConfigured: Boolean(process.env.SUPABASE_URL),
     models: [
@@ -203,9 +244,32 @@ apiRouter.get("/models", (_req: Request, res: Response) => {
         id: "z-ai/glm-5.2:free",
         name: "Groky 5.2 Astra",
         provider: "OpenRouter",
-        badge: "Free",
-        description: "Versatile, advanced reasoning and multilingual intelligence model with deep analytical precision.",
+        badge: "Super 2jt",
+        description: "Model unggulan dengan penalaran kompleks, analisis dokumen mendalam, dan arsitektur software skala besar (Eksklusif Paket Super Rp 2jt/Bulan).",
         maxTokens: 128000,
+        isLocked: true,
+        supportsVision: true,
+        supportsCodeArtifacts: true,
+      },
+      {
+        id: "google/gemma-4-31b-it:free",
+        name: "Groky 4 Super",
+        provider: "OpenRouter",
+        badge: "Plus & Super",
+        description: "Optimal untuk pemrosesan pemrograman tingkat lanjut, refactoring skrip, dan logika algoritma.",
+        maxTokens: 128000,
+        isLocked: true,
+        supportsVision: true,
+        supportsCodeArtifacts: true,
+      },
+      {
+        id: "google/gemma-4-26b-a4b-it:free",
+        name: "Groky 3.7 Flow",
+        provider: "OpenRouter",
+        badge: "Plus & Super",
+        description: "Dioptimalkan untuk pembuatan komponen antarmuka interaktif, visualisasi data, dan alur agen.",
+        maxTokens: 128000,
+        isLocked: true,
         supportsVision: true,
         supportsCodeArtifacts: true,
       },
@@ -213,9 +277,10 @@ apiRouter.get("/models", (_req: Request, res: Response) => {
         id: "inclusionai/ling-3.0-flash-fin:free",
         name: "Groky 2.5 Flash",
         provider: "OpenRouter",
-        badge: "Free",
-        description: "Ultra-fast response generation tailored for coding, swift analysis, and general chat speed.",
+        badge: "Gratis",
+        description: "Respon cepat berlatensi rendah untuk percakapan umum, tanya-jawab harian, dan ringkasan kilat.",
         maxTokens: 128000,
+        isLocked: false,
         supportsVision: false,
         supportsCodeArtifacts: true,
       },
@@ -223,9 +288,10 @@ apiRouter.get("/models", (_req: Request, res: Response) => {
         id: "nvidia/nemotron-3-ultra-550b-a55b:free",
         name: "Groky 3.5 Flash",
         provider: "OpenRouter",
-        badge: "Free",
-        description: "High-parameter deep reasoning architecture powered by Nemotron for complex logic and mathematics.",
+        badge: "Gratis",
+        description: "Model serbaguna untuk pemrosesan teks terstruktur, logika matematika, dan penulisan dokumen.",
         maxTokens: 128000,
+        isLocked: false,
         supportsVision: false,
         supportsCodeArtifacts: true,
       },
@@ -274,10 +340,11 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
 
     const defaultSystemPrompt = `You are Groky AI, an elite AI Assistant with exceptional reasoning, 3D engineering, and high-craft coding capabilities.
 Key Directives for Code & UI Generation:
-1. Modern Aesthetic Craft: Design sleek, contemporary interfaces with refined typography, balanced whitespace, and sophisticated lighting/shadows. Strictly avoid tacky 90s clichés, rigid boxy layouts, and excessive rainbow/purple-blue neon gradients.
-2. 3D & Interactive Graphics: When creating 3D graphics, interactive models, or visual simulations, utilize Three.js (THREE is already globally available in the preview sandbox). Implement smooth 60fps render loops, elegant geometries/materials (MeshStandardMaterial, MeshPhysicalMaterial), realistic ambient & directional lighting, responsive window resize handlers, and OrbitControls or mouse-drag interaction.
-3. Complete & Self-Contained: Whenever producing HTML/CSS/JS components, ensure the code is 100% complete, executable, and ready for instant rendering in the Artifact Viewer.
-4. Clean Markdown & Modular Code: Structure explanations concisely with clear sections and language-tagged code blocks (e.g. \`\`\`html, \`\`\`tsx, \`\`\`python).`;
+1. NO EMOJIS IN WEB/APPS & UI: When creating web applications, HTML/CSS/JS components, dashboards, buttons, headers, or user interfaces, strictly DO NOT use emojis anywhere in the code or interface. Maintain clean, professional typography and sleek vector icons instead.
+2. Immaculate & Neat Formatting: Always ensure all generated code, applications, and documents are exceptionally clean, neat, beautifully structured, properly indented, and visually balanced.
+3. 3D & Interactive Graphics: When creating 3D graphics or interactive models, utilize Three.js (THREE is globally available in the preview sandbox). Implement smooth 60fps render loops, elegant materials (MeshStandardMaterial, MeshPhysicalMaterial), realistic lighting, and OrbitControls.
+4. Complete & Self-Contained: Whenever producing HTML/CSS/JS components, ensure the code is 100% complete, executable, and ready for instant rendering in the Artifact Viewer.
+5. Device Memory & Learning: You have access to persistent device memory context. If the user asks you to remember a fact or preference (e.g. "ingat bahwa nama saya Azha", "simpan memori preferensi saya React"), acknowledge it warmly and append \`[MEMORY_SAVE: Key | Value]\` at the end of your response so it is saved to the user's device memory.`;
 
     const fullSystemInstruction = systemPrompt
       ? `${defaultSystemPrompt}\n\nCustom User Directive:\n${systemPrompt}`

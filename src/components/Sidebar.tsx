@@ -12,6 +12,8 @@ interface SidebarProps {
   isOpen: boolean;
   onToggleOpen: () => void;
   isMobile: boolean;
+  onOpenLanding?: () => void;
+  onOpenDeviceMemory?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -24,6 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onToggleOpen,
   isMobile,
+  onOpenLanding,
+  onOpenDeviceMemory,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -137,7 +141,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className="flex flex-col h-full bg-[#FAF8F5] dark:bg-stone-900 border-r border-stone-200/80 dark:border-stone-800 select-none text-stone-800 dark:text-stone-200">
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-stone-200/60 dark:border-stone-800/60">
-        <div className="flex items-center gap-2.5">
+        <div
+          onClick={onOpenLanding}
+          className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
+          title="Buka Landing Page Groky AI"
+        >
           <img
             src="https://i.imgur.com/0J9yC8T.jpeg"
             alt="Groky AI"
@@ -152,8 +160,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* New Chat Button */}
-      <div className="p-3">
+      {/* Action Buttons: New Chat & Landing Page */}
+      <div className="p-3 space-y-1.5">
         <button
           id="new-chat-button"
           onClick={onNewChat}
@@ -169,21 +177,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Conversations List - Without Pinned Section header, clean single list */}
+      {/* Conversations List - Only show chats that have messages */}
       <div className="flex-1 overflow-y-auto px-2 space-y-1 py-1 text-xs">
         <div className="px-2.5 py-1 text-[11px] font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
-          <span>Conversations</span>
+          <span>Riwayat Chat</span>
         </div>
-        {conversations.length === 0 ? (
-          <div className="px-3 py-6 text-center text-stone-400 text-xs">
-            No conversations yet
-          </div>
-        ) : (
-          conversations.map((conv) => renderConversationItem(conv))
-        )}
+        {(() => {
+          const historyConvs = conversations.filter(
+            (c) => c.messages && c.messages.length > 0
+          );
+          if (historyConvs.length === 0) {
+            return (
+              <div className="px-3 py-6 text-center text-stone-400 text-xs">
+                Belum ada riwayat chat
+              </div>
+            );
+          }
+          return historyConvs.map((conv) => renderConversationItem(conv));
+        })()}
       </div>
-
-      {/* Note: The bottom section (Supabase Docs, Light Mode, Settings) is cleanly removed per user request */}
     </div>
   );
 

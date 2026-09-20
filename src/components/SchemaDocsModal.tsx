@@ -109,6 +109,15 @@ CREATE TABLE messages (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Device & IP Address Logging Table for Visitor Tracking
+CREATE TABLE device_logs (
+    id TEXT PRIMARY KEY,
+    device_name TEXT NOT NULL,
+    ip_address TEXT NOT NULL,
+    user_agent TEXT,
+    created_at BIGINT NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint
+);
+
 CREATE TABLE document_chunks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     file_id UUID NOT NULL,

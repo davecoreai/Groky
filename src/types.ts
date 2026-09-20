@@ -1,3 +1,10 @@
+export interface MemoryItem {
+  id: string;
+  key: string;
+  value: string;
+  updatedAt: number;
+}
+
 export type Role = "user" | "assistant" | "system";
 
 export interface AttachedFile {
@@ -53,6 +60,7 @@ export interface ModelOption {
   badge: string;
   description: string;
   maxTokens: number;
+  isLocked?: boolean;
   isCustom?: boolean;
   supportsVision?: boolean;
   supportsCodeArtifacts?: boolean;

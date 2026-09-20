@@ -16,6 +16,8 @@ interface ChatAreaProps {
   onToggleSidebar: () => void;
   onOpenArtifact: (code: string, language: string, title?: string) => void;
   onPreviewDocument: (file: AttachedFile) => void;
+  onOpenLanding?: () => void;
+  onOpenDeviceMemory?: () => void;
 }
 
 // KaTeX LaTeX formula renderer
@@ -43,6 +45,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onToggleSidebar,
   onOpenArtifact,
   onPreviewDocument,
+  onOpenLanding,
+  onOpenDeviceMemory,
 }) => {
   const [inputText, setInputText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -969,6 +973,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   models={models}
                   selectedModelId={selectedModelId}
                   onSelectModel={onSelectModel}
+                  onOpenPricing={onOpenLanding}
                 />
               </div>
 

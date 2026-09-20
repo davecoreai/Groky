@@ -5,20 +5,28 @@ import {
   loadSettings,
   saveSettings,
   DEFAULT_MODELS,
+  loadDeviceMemory,
+  addMemoryItem,
+  removeMemoryItem,
+  clearDeviceMemory,
+  getFormattedDeviceMemoryContext,
 } from "./lib/storage";
 import {
   getSupabaseClient,
   fetchConversationsFromSupabase,
   saveConversationToSupabase,
   deleteConversationFromSupabase,
+  logDeviceVisitorToSupabase,
 } from "./lib/supabase";
-import { Conversation, Message, AttachedFile, UserSettings, Artifact } from "./types";
+import { Conversation, Message, AttachedFile, UserSettings, Artifact, MemoryItem } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { ArtifactViewer } from "./components/ArtifactViewer";
 import { ThreeCanvas } from "./components/ThreeCanvas";
 import { SchemaDocsModal } from "./components/SchemaDocsModal";
 import { DocumentPreviewModal } from "./components/DocumentPreviewModal";
+import { LandingPage } from "./components/LandingPage";
+import { DeviceMemoryModal } from "./components/DeviceMemoryModal";
 
 // Helper to extract clean conversation topic title from user prompt
 function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
@@ -56,7 +64,9 @@ function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
 }
 
 export default function App() {
-  // Requirement 2: Saat refresh halaman AUTO MASUK KE NEW CHAT
+  const FREE_DEFAULT_MODEL = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "inclusionai/ling-3.0-flash-fin:free";
+
+  // Requirement: Saat baru masuk / refresh halaman, default model selector ke model gratis
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const saved = loadConversations();
     const freshId = `conv-${Date.now()}`;
@@ -66,10 +76,18 @@ export default function App() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isPinned: false,
-      modelId: "z-ai/glm-5.2:free",
+      modelId: FREE_DEFAULT_MODEL,
       messages: [],
     };
-    return [freshChat, ...saved.filter((c) => c.messages.length > 0)];
+    // Ensure any loaded empty or locked conversations fall back to free model if locked
+    const sanitizedSaved = saved.map((c) => {
+      const modelObj = DEFAULT_MODELS.find((m) => m.id === c.modelId);
+      if (!c.modelId || modelObj?.isLocked) {
+        return { ...c, modelId: FREE_DEFAULT_MODEL };
+      }
+      return c;
+    });
+    return [freshChat, ...sanitizedSaved.filter((c) => c.messages.length > 0)];
   });
 
   const [activeId, setActiveId] = useState<string>(() => {
@@ -77,6 +95,37 @@ export default function App() {
   });
 
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
+  const [viewMode, setViewMode] = useState<"landing" | "chat">((): "landing" | "chat" => {
+    try {
+      if (typeof window !== "undefined") {
+        const hasVisited = localStorage.getItem("groky_has_visited");
+        if (hasVisited === "true") {
+          const savedMode = localStorage.getItem("groky_last_view_mode");
+          return (savedMode as "landing" | "chat") || "chat";
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return "landing";
+  });
+
+  // Automatically save viewMode state and visited flag to localStorage
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("groky_has_visited", "true");
+        localStorage.setItem("groky_last_view_mode", viewMode);
+      }
+    } catch {}
+  }, [viewMode]);
+
+  // Log visitor device name and IP address to Supabase database on mount
+  useEffect(() => {
+    logDeviceVisitorToSupabase(settings).catch((err) => {
+      console.log("Device logging background notice:", err);
+    });
+  }, []);
   const [isStreaming, setIsStreaming] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -84,6 +133,8 @@ export default function App() {
   const [isArtifactPanelOpen, setIsArtifactPanelOpen] = useState(false);
   const [isSchemaDocsOpen, setIsSchemaDocsOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<AttachedFile | null>(null);
+  const [isDeviceMemoryOpen, setIsDeviceMemoryOpen] = useState(false);
+  const [deviceMemories, setDeviceMemories] = useState<MemoryItem[]>(() => loadDeviceMemory());
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const typewriterTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -182,13 +233,14 @@ export default function App() {
   // New Chat (Previous streaming keeps running in the background)
   const handleNewChat = () => {
     const newId = `conv-${Date.now()}`;
+    const freeDefaultModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "inclusionai/ling-3.0-flash-fin:free";
     const newConv: Conversation = {
       id: newId,
       title: "New Chat",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isPinned: false,
-      modelId: settings.preferredModel || "z-ai/glm-5.2:free",
+      modelId: freeDefaultModel,
       messages: [],
     };
     setConversations((prev) => [newConv, ...prev]);
@@ -242,6 +294,11 @@ export default function App() {
 
   // Select Model
   const handleSelectModel = (modelId: string) => {
+    const chosenModel = DEFAULT_MODELS.find((m) => m.id === modelId);
+    if (chosenModel?.isLocked) {
+      console.warn("Attempted to select locked model:", chosenModel.name);
+      return;
+    }
     setConversations((prev) =>
       prev.map((c) => (c.id === activeId ? { ...c, modelId } : c))
     );
@@ -316,7 +373,39 @@ export default function App() {
     if ((!userPrompt.trim() && files.length === 0) || isStreaming) return;
 
     const targetConvId = activeConversation.id;
-    const targetModelId = activeConversation.modelId || "z-ai/glm-5.2:free";
+    let targetModelId = activeConversation.modelId || "inclusionai/ling-3.0-flash-fin:free";
+
+    // Guard: Check if model is locked
+    const activeModelObj = DEFAULT_MODELS.find((m) => m.id === targetModelId);
+    if (activeModelObj?.isLocked) {
+      const freeModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "inclusionai/ling-3.0-flash-fin:free";
+      const userMessage: Message = {
+        id: `msg-${Date.now()}`,
+        role: "user",
+        content: userPrompt,
+        timestamp: Date.now(),
+        files,
+      };
+      const lockedWarning: Message = {
+        id: `msg-${Date.now() + 1}`,
+        role: "assistant",
+        content: `🔒 **Model ${activeModelObj.name} Terkunci (${activeModelObj.badge})**\n\nModel ini merupakan fitur eksklusif paket Premium. Sesi chat Anda telah kami alihkan ke model gratis **Groky 2.5 Flash**. Silakan upgrade paket untuk mengakses model ${activeModelObj.name}.`,
+        timestamp: Date.now() + 1,
+        model: freeModel,
+      };
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetConvId
+            ? {
+                ...c,
+                modelId: freeModel,
+                messages: [...c.messages, userMessage, lockedWarning],
+              }
+            : c
+        )
+      );
+      return;
+    }
     const userMessageId = `msg-${Date.now()}`;
     const assistantMessageId = `msg-${Date.now() + 1}`;
 
@@ -374,6 +463,11 @@ export default function App() {
           content: m.content,
         }));
 
+      const memoryCtx = getFormattedDeviceMemoryContext();
+      const fullPromptWithMemory = memoryCtx
+        ? `${settings.systemPrompt}\n\n[Persistent Device Memory (Facts & preferences for this device)]:\n${memoryCtx}`
+        : settings.systemPrompt;
+
       const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -381,7 +475,7 @@ export default function App() {
         body: JSON.stringify({
           messages: payloadMessages,
           model: targetModelId,
-          systemPrompt: settings.systemPrompt,
+          systemPrompt: fullPromptWithMemory,
           temperature: settings.temperature,
           files,
           customConfig: {
@@ -449,7 +543,19 @@ export default function App() {
         typewriterTimerRef.current = null;
       }
 
-      const finalContent = currentAccumulatedTextRef.current;
+      let finalContent = currentAccumulatedTextRef.current;
+
+      // Automatically parse AI memory tag if emitted
+      const memMatch = finalContent.match(/\[MEMORY_SAVE:\s*(.*?)\s*\|\s*(.*?)\s*\]/i);
+      if (memMatch) {
+        const memKey = memMatch[1];
+        const memVal = memMatch[2];
+        if (memKey && memVal) {
+          const updatedMems = addMemoryItem(memKey, memVal);
+          setDeviceMemories(updatedMems);
+        }
+        finalContent = finalContent.replace(/\[MEMORY_SAVE:\s*(.*?)\s*\|\s*(.*?)\s*\]/gi, "").trim();
+      }
 
       // Finalize assistant message and sync to Supabase
       setConversations((prev) => {
@@ -552,6 +658,16 @@ export default function App() {
     setIsArtifactPanelOpen(true);
   };
 
+  if (viewMode === "landing") {
+    return (
+      <LandingPage
+        onStartChat={() => setViewMode("chat")}
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+      />
+    );
+  }
+
   return (
     <div
       id="groky-app-root"
@@ -570,15 +686,21 @@ export default function App() {
         activeId={activeId}
         onSelectConversation={(id) => {
           setActiveId(id);
+          setViewMode("chat");
           if (isMobile) setSidebarOpen(false);
         }}
-        onNewChat={handleNewChat}
+        onNewChat={() => {
+          handleNewChat();
+          setViewMode("chat");
+        }}
         onRenameConversation={handleRenameConversation}
         onDeleteConversation={handleDeleteConversation}
         onTogglePinConversation={handleTogglePinConversation}
         isOpen={sidebarOpen}
         onToggleOpen={() => setSidebarOpen(!sidebarOpen)}
         isMobile={isMobile}
+        onOpenLanding={() => setViewMode("landing")}
+        onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
       />
 
       {/* Central Chat Arena (Minimalist Claude design) */}
@@ -590,11 +712,13 @@ export default function App() {
           onStopStreaming={handleStopStreaming}
           onEditMessage={handleEditMessage}
           models={DEFAULT_MODELS}
-          selectedModelId={activeConversation?.modelId || "z-ai/glm-5.2:free"}
+          selectedModelId={activeConversation?.modelId || FREE_DEFAULT_MODEL}
           onSelectModel={handleSelectModel}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenArtifact={handleOpenArtifact}
           onPreviewDocument={(file) => setPreviewFile(file)}
+          onOpenLanding={() => setViewMode("landing")}
+          onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
         />
       </main>
 
@@ -606,6 +730,25 @@ export default function App() {
           isMobile={isMobile}
         />
       )}
+
+      {/* Device Memory Manager Modal */}
+      <DeviceMemoryModal
+        isOpen={isDeviceMemoryOpen}
+        onClose={() => setIsDeviceMemoryOpen(false)}
+        memories={deviceMemories}
+        onAddMemory={(key, val) => {
+          const updated = addMemoryItem(key, val);
+          setDeviceMemories(updated);
+        }}
+        onRemoveMemory={(id) => {
+          const updated = removeMemoryItem(id);
+          setDeviceMemories(updated);
+        }}
+        onClearMemory={() => {
+          clearDeviceMemory();
+          setDeviceMemories([]);
+        }}
+      />
 
       {/* Supabase & Architecture Docs Modal */}
       <SchemaDocsModal

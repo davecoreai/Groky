@@ -159,6 +159,69 @@ export async function deleteConversationFromSupabase(
   }
 }
 
+export function getDeviceName(): string {
+  if (typeof window === "undefined" || !navigator) return "Unknown Device";
+  const ua = navigator.userAgent || "";
+  if (/android/i.test(ua)) return "Android Phone/Tablet";
+  if (/iPhone/i.test(ua)) return "Apple iPhone";
+  if (/iPad/i.test(ua)) return "Apple iPad";
+  if (/Macintosh|Mac OS/i.test(ua)) return "Mac / macOS Device";
+  if (/Windows/i.test(ua)) return "Windows PC";
+  if (/Linux/i.test(ua)) return "Linux Workstation";
+  return "Desktop / Mobile Web Browser";
+}
+
+export async function logDeviceVisitorToSupabase(
+  settings?: Partial<UserSettings>
+): Promise<void> {
+  try {
+    const deviceName = getDeviceName();
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+
+    // 1. Call backend route to record IP address and device name
+    let serverIp = "127.0.0.1";
+    try {
+      const res = await fetch("/api/visitor-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName, userAgent }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ip) serverIp = data.ip;
+      }
+    } catch {
+      // Fallback IP lookup
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          if (ipData.ip) serverIp = ipData.ip;
+        }
+      } catch {}
+    }
+
+    // 2. Also save to user's client-configured Supabase database if credentials present
+    const client = getSupabaseClient(settings);
+    if (client) {
+      const { error } = await client.from("device_logs").insert([
+        {
+          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          device_name: deviceName,
+          ip_address: serverIp,
+          user_agent: userAgent,
+          created_at: Date.now(),
+        },
+      ]);
+      if (error) {
+        console.warn("Supabase device_logs insert warning:", error.message);
+      }
+    }
+  } catch (err) {
+    console.warn("Failed logging visitor device to Supabase:", err);
+  }
+}
+
 export const SUPABASE_SQL_SCHEMA = `-- Run this in your Supabase SQL Editor to initialize Groky AI tables:
 
 create table if not exists public.conversations (
@@ -179,10 +242,20 @@ create table if not exists public.messages (
   model text
 );
 
+create table if not exists public.device_logs (
+  id text primary key,
+  device_name text not null,
+  ip_address text not null,
+  user_agent text,
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint
+);
+
 -- Enable Row Level Security (RLS) & Public access for API keys
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
+alter table public.device_logs enable row level security;
 
 create policy "Allow all actions for anon" on public.conversations for all using (true) with check (true);
 create policy "Allow all actions for anon" on public.messages for all using (true) with check (true);
+create policy "Allow all actions for anon" on public.device_logs for all using (true) with check (true);
 `;
