@@ -91,6 +91,8 @@ apiRouter.get("/health", (_req: Request, res: Response) => {
     status: "ok",
     app: "Groky AI",
     version: "2.4.0",
+    url: "https://groky-seven.vercel.app",
+    openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     timestamp: new Date().toISOString(),
   });
@@ -327,7 +329,7 @@ Key Directives for Code & UI Generation:
             method: "POST",
             headers: {
               Authorization: `Bearer ${openRouterApiKey}`,
-              "HTTP-Referer": process.env.APP_URL || "https://groky.ai",
+              "HTTP-Referer": process.env.APP_URL || "https://groky-seven.vercel.app",
               "X-Title": "Groky AI",
               "Content-Type": "application/json",
             },
