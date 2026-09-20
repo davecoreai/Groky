@@ -9,6 +9,17 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Enable CORS for Vercel Serverless & local previews
+app.use((_req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "X-Requested-With,content-type,Authorization");
+  if (_req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Middleware for body parsing
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
@@ -70,11 +81,12 @@ function checkRateLimit(req: Request, res: Response, next: () => void) {
 }
 
 // ==========================================
-// API ROUTES
+// API ROUTER (Mountable at /api & /)
 // ==========================================
+const apiRouter = express.Router();
 
 // Health Check
-app.get("/api/health", (_req: Request, res: Response) => {
+apiRouter.get("/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
     app: "Groky AI",
@@ -179,7 +191,7 @@ async function executeStreamWithFallback({
 }
 
 // Available Models (User Specified Free Models)
-app.get("/api/models", (_req: Request, res: Response) => {
+apiRouter.get("/models", (_req: Request, res: Response) => {
   res.json({
     defaultModel: "z-ai/glm-5.2:free",
     openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
@@ -220,7 +232,7 @@ app.get("/api/models", (_req: Request, res: Response) => {
 });
 
 // Real-time Chat Streaming API via SSE (OpenRouter First Architecture)
-app.post("/api/chat/stream", checkRateLimit, async (req: Request, res: Response) => {
+apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Response) => {
   const {
     messages = [],
     model = "z-ai/glm-5.2:free",
@@ -458,7 +470,7 @@ Key Directives for Code & UI Generation:
 });
 
 // Document & File Parsing Analyzer endpoint
-app.post("/api/documents/analyze", async (req: Request, res: Response) => {
+apiRouter.post("/documents/analyze", async (req: Request, res: Response) => {
   try {
     const { filename, content, mimeType } = req.body;
     if (!content) {
@@ -486,7 +498,7 @@ app.post("/api/documents/analyze", async (req: Request, res: Response) => {
 });
 
 // Embeddings endpoint for RAG demo
-app.post("/api/embeddings", async (req: Request, res: Response) => {
+apiRouter.post("/embeddings", async (req: Request, res: Response) => {
   try {
     const { text } = req.body;
     if (!text) {
@@ -510,6 +522,10 @@ app.post("/api/embeddings", async (req: Request, res: Response) => {
     res.status(500).json({ error: err?.message || "Failed to calculate embeddings" });
   }
 });
+
+// Mount API Router for both /api/* and root Serverless invocation
+app.use("/api", apiRouter);
+app.use("/", apiRouter);
 
 // ==========================================
 // VITE OR STATIC SERVING
