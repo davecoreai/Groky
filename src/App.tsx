@@ -111,16 +111,35 @@ export default function App() {
     }
   }, [settings.supabaseUrl, settings.supabaseAnonKey, activeId, settings]);
 
-  // Responsive mobile detector
+  // Responsive mobile detector & visual viewport sync for mobile keyboard
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
   useEffect(() => {
-    const checkMobile = () => {
+    const updateViewport = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
       if (mobile) setSidebarOpen(false);
+
+      if (typeof window !== "undefined") {
+        const currentHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        setViewportHeight(currentHeight);
+      }
     };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", updateViewport);
+      window.visualViewport.addEventListener("scroll", updateViewport);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", updateViewport);
+        window.visualViewport.removeEventListener("scroll", updateViewport);
+      }
+    };
   }, []);
 
   // Theme resolution (light / dark / system)
@@ -536,7 +555,11 @@ export default function App() {
   return (
     <div
       id="groky-app-root"
-      className="flex h-[100dvh] w-full overflow-hidden bg-[#FAF8F5] dark:bg-stone-950 font-sans-clean transition-colors duration-200 relative"
+      style={{
+        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+        maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
+      }}
+      className="flex w-full overflow-hidden bg-[#FAF8F5] dark:bg-stone-950 font-sans-clean transition-colors duration-200 relative"
     >
       {/* 3D Ambient Visual Canvas */}
       <ThreeCanvas isDark={isDark} enabled={settings.enable3DBackground} />
@@ -559,7 +582,7 @@ export default function App() {
       />
 
       {/* Central Chat Arena (Minimalist Claude design) */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
+      <main className="flex-1 flex flex-col h-full min-h-0 overflow-hidden relative z-10">
         <ChatArea
           messages={activeConversation?.messages || []}
           isStreaming={isStreaming}

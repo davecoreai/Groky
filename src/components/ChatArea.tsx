@@ -52,7 +52,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [fullscreenMedia, setFullscreenMedia] = useState<AttachedFile | null>(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -62,32 +61,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const isUserScrolledUpRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
   const scrollRafRef = useRef<number | null>(null);
-
-  // Dynamic Virtual Keyboard Height Adjustment for Mobile (lifts input box cleanly above keyboard)
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.visualViewport) return;
-
-    const vv = window.visualViewport;
-    const updateKeyboardOffset = () => {
-      // Calculate how much keyboard is occupying the window bottom
-      const offset = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
-      setKeyboardOffset(offset);
-      if (offset > 40) {
-        // Smooth scroll message container when keyboard expands
-        requestAnimationFrame(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        });
-      }
-    };
-
-    vv.addEventListener("resize", updateKeyboardOffset);
-    vv.addEventListener("scroll", updateKeyboardOffset);
-
-    return () => {
-      vv.removeEventListener("resize", updateKeyboardOffset);
-      vv.removeEventListener("scroll", updateKeyboardOffset);
-    };
-  }, []);
 
   // Monitor user scrolling to avoid jerking screen if user is reading previous code
   const handleContainerScroll = () => {
@@ -606,13 +579,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   return (
     <div
-      className="flex-1 flex flex-col h-full overflow-hidden relative"
+      className="flex-1 flex flex-col h-full min-h-0 overflow-hidden relative"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Top Header Bar (Clean Minimal Header) */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3 min-h-[56px] bg-transparent z-10">
+      <header className="flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 min-h-[50px] sm:min-h-[56px] bg-transparent z-10 shrink-0">
         <div className="flex items-center gap-2">
           {/* Smooth Sidebar Toggle with transparent background */}
           <button
@@ -640,11 +613,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div
         ref={scrollContainerRef}
         onScroll={handleContainerScroll}
-        className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6 overscroll-contain"
+        className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 py-3 sm:py-6 space-y-4 sm:space-y-6 overscroll-contain"
       >
         {messages.length === 0 ? (
           /* Claude AI-Inspired Welcome Screen with Groky Logo */
-          <div className="max-w-2xl mx-auto py-10 px-4 text-center space-y-7 animate-in fade-in duration-300">
+          <div className="max-w-2xl mx-auto py-2 sm:py-8 px-2 sm:px-4 text-center space-y-4 sm:space-y-6 animate-in fade-in duration-300">
             {/* Claude-style warm greeting header */}
             <div className="space-y-4">
               <div className="flex justify-center">
@@ -838,14 +811,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Floating Input Capsule (Claude-inspired minimal) */}
       <div
         id="chat-input-wrapper"
-        style={{
-          paddingBottom:
-            keyboardOffset > 0
-              ? `${keyboardOffset + 10}px`
-              : "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
-          transition: "padding-bottom 0.12s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-        className="px-3 sm:px-6 sm:pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0 z-20"
+        className="px-3 sm:px-6 pb-2.5 sm:pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0 z-20"
       >
         <div className="max-w-3xl mx-auto">
           {/* Capsule Container: File preview is merged inside the placeholder container */}
