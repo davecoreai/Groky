@@ -1,6 +1,5 @@
 import express, { Request, Response } from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
@@ -13,19 +12,6 @@ const PORT = 3000;
 // Middleware for body parsing
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
-
-// Normalize URL for Vercel Serverless routing if /api prefix is rewritten
-app.use((req, _res, next) => {
-  if (
-    !req.url.startsWith("/api") &&
-    !req.url.startsWith("/@") &&
-    !req.url.startsWith("/src") &&
-    !req.url.includes(".")
-  ) {
-    req.url = `/api${req.url.startsWith("/") ? "" : "/"}${req.url}`;
-  }
-  next();
-});
 
 // Lazy GoogleGenAI client singleton
 let aiClient: GoogleGenAI | null = null;
@@ -530,6 +516,7 @@ app.post("/api/embeddings", async (req: Request, res: Response) => {
 // ==========================================
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

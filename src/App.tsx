@@ -524,7 +524,7 @@ export default function App() {
   return (
     <div
       id="groky-app-root"
-      className="flex h-screen w-screen overflow-hidden bg-[#FAF8F5] dark:bg-stone-950 font-sans-clean transition-colors duration-200 relative"
+      className="flex h-[100dvh] w-full overflow-hidden bg-[#FAF8F5] dark:bg-stone-950 font-sans-clean transition-colors duration-200 relative"
     >
       {/* 3D Ambient Visual Canvas */}
       <ThreeCanvas isDark={isDark} enabled={settings.enable3DBackground} />

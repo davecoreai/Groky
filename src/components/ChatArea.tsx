@@ -55,12 +55,49 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
+  const isUserScrolledUpRef = useRef(false);
+  const prevMessageCountRef = useRef(messages.length);
+  const scrollRafRef = useRef<number | null>(null);
 
-  // Auto-scroll to bottom on new messages or stream chunks
+  // Monitor user scrolling to avoid jerking screen if user is reading previous code
+  const handleContainerScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    // If within 90px of bottom, consider user "at bottom" and allow auto-pinning
+    isUserScrolledUpRef.current = distanceToBottom > 90;
+  };
+
+  // Silky Smooth Pin-to-Bottom Auto-Scroll without conflicting animation frames
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const isNewMessage = messages.length > prevMessageCountRef.current;
+    prevMessageCountRef.current = messages.length;
+
+    if (isNewMessage) {
+      isUserScrolledUpRef.current = false;
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+
+    if (isStreaming && !isUserScrolledUpRef.current && scrollContainerRef.current) {
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+      scrollRafRef.current = requestAnimationFrame(() => {
+        if (scrollContainerRef.current && !isUserScrolledUpRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      });
+    }
+
+    return () => {
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
   }, [messages, isStreaming]);
 
   // Click outside listener for attachment dropdown
@@ -573,7 +610,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleContainerScroll}
+        className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6 overscroll-contain"
+      >
         {messages.length === 0 ? (
           /* Claude AI-Inspired Welcome Screen with Groky Logo */
           <div className="max-w-2xl mx-auto py-10 px-4 text-center space-y-7 animate-in fade-in duration-300">
@@ -768,7 +809,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       </div>
 
       {/* Floating Input Capsule (Claude-inspired minimal) */}
-      <div className="px-4 sm:px-6 pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90">
+      <div className="px-3 sm:px-6 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0">
         <div className="max-w-3xl mx-auto">
           {/* Capsule Container: File preview is merged inside the placeholder container */}
           <div className="relative rounded-2xl border border-stone-300 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-md focus-within:border-amber-500/80 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all p-3.5 sm:p-4 pb-2.5 sm:pb-3">

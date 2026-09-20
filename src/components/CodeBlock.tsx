@@ -27,18 +27,21 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       cancelAnimationFrame(rafRef.current);
     }
 
-    // Schedule syntax highlighting on next animation frame to eliminate UI blocking
-    rafRef.current = requestAnimationFrame(() => {
-      if (codeRef.current) {
-        try {
-          Prism.highlightElement(codeRef.current);
-        } catch {
-          // Fallback if language grammar is not found
+    // Debounce highlighting during rapid token streaming to prevent DOM thrashing & jitter
+    const timer = setTimeout(() => {
+      rafRef.current = requestAnimationFrame(() => {
+        if (codeRef.current) {
+          try {
+            Prism.highlightElement(codeRef.current);
+          } catch {
+            // Fallback if language grammar is not found
+          }
         }
-      }
-    });
+      });
+    }, 100);
 
     return () => {
+      clearTimeout(timer);
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }
@@ -114,8 +117,11 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
       </div>
 
       {/* Code Content */}
-      <div className="relative overflow-x-auto p-4 font-mono leading-relaxed" style={{ fontSize: `${fontSize}px` }}>
-        <pre className="!m-0 !p-0 !bg-transparent font-mono whitespace-pre text-stone-100">
+      <div
+        className="relative overflow-x-auto p-4 font-mono leading-relaxed select-text"
+        style={{ fontSize: `${fontSize}px`, tabSize: 2, fontVariantNumeric: "tabular-nums" }}
+      >
+        <pre className="!m-0 !p-0 !bg-transparent font-mono whitespace-pre text-stone-100 will-change-contents">
           <code ref={codeRef} className={`language-${cleanLang}`}>
             {code}
           </code>
