@@ -4,6 +4,11 @@ import { Message, AttachedFile, ModelOption } from "../types";
 import { CodeBlock } from "./CodeBlock";
 import { ModelSelector } from "./ModelSelector";
 
+const SOUNDWAVE_BARS = [
+  6, 12, 18, 24, 16, 22, 28, 20, 26, 14, 20, 26, 30, 24, 18, 26,
+  22, 16, 24, 28, 20, 14, 18, 12, 8, 6, 6, 8, 6, 4, 4, 6
+];
+
 interface ChatAreaProps {
   messages: Message[];
   isStreaming: boolean;
@@ -57,6 +62,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [fullscreenMedia, setFullscreenMedia] = useState<AttachedFile | null>(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
 
+  // Web Speech API Voice-to-Text state
+  const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const [interimText, setInterimText] = useState("");
+
+  const recognitionRef = useRef<any>(null);
+  const initialPrefixRef = useRef("");
+  const finalTranscriptRef = useRef("");
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -65,6 +79,203 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const isUserScrolledUpRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
   const scrollRafRef = useRef<number | null>(null);
+
+  // Web Speech API browser compatibility check
+  const isSpeechSupported =
+    typeof window !== "undefined" &&
+    Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+
+  const startRecognition = () => {
+    const SpeechRecognitionClass =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionClass) {
+      setSpeechError("Browser tidak mendukung Web Speech API.");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionClass();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      // Sistem otomatis menentukan bahasa berdasarkan sistem perangkat / browser
+      // Mendukung semua bahasa termasuk Basa Jawa (jv-ID), Indonesia (id-ID), dsb.
+      let systemLang = "id-ID";
+      if (typeof navigator !== "undefined") {
+        systemLang = navigator.language || (navigator as any).userLanguage || "id-ID";
+        if (navigator.languages && navigator.languages.length > 0) {
+          const regionalMatch = navigator.languages.find(
+            (l) => l.startsWith("jv") || l.startsWith("id") || l.startsWith("su")
+          );
+          if (regionalMatch) systemLang = regionalMatch;
+        }
+      }
+      try {
+        const saved = localStorage.getItem("groky_voice_lang");
+        if (saved) systemLang = saved;
+      } catch {}
+      recognition.lang = systemLang;
+
+      initialPrefixRef.current = inputText;
+      finalTranscriptRef.current = "";
+      setInterimText("");
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setSpeechError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let newlyFinalized = "";
+        let currentInterim = "";
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const res = event.results[i];
+          const text = res[0]?.transcript || "";
+          if (res.isFinal) {
+            newlyFinalized += text;
+          } else {
+            currentInterim += text;
+          }
+        }
+
+        if (newlyFinalized) {
+          const trimmed = newlyFinalized.trim();
+          if (trimmed) {
+            if (finalTranscriptRef.current) {
+              finalTranscriptRef.current += " " + trimmed;
+            } else {
+              finalTranscriptRef.current = trimmed;
+            }
+          }
+        }
+
+        const safeInterim = currentInterim.trim();
+        setInterimText(safeInterim);
+
+        // Merge cleanly without duplicate words or extra spaces
+        const speechCombined = [finalTranscriptRef.current, safeInterim].filter(Boolean).join(" ");
+        const base = initialPrefixRef.current.trim();
+        const combined = base ? (speechCombined ? `${base} ${speechCombined}` : base) : speechCombined;
+        setInputText(combined);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("[Web Speech API] Error:", event.error);
+        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+          setSpeechError("Akses mikrofon ditolak oleh setelan browser.");
+        } else if (event.error !== "no-speech") {
+          setSpeechError(`Speech error: ${event.error}`);
+        }
+        setIsListening(false);
+        setInterimText("");
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        setInterimText("");
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error("[Web Speech API] Failed to initialize:", err);
+      setSpeechError("Gagal memulai mikrofon.");
+      setIsListening(false);
+    }
+  };
+
+  const handleStopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsListening(false);
+    setInterimText("");
+    if (textareaRef.current) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+    }
+  };
+
+  const handleCancelListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
+    }
+    setIsListening(false);
+    setInterimText("");
+    finalTranscriptRef.current = "";
+    setInputText(initialPrefixRef.current);
+  };
+
+  const handleSendVoice = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+    }
+    setIsListening(false);
+    setInterimText("");
+    const toSend = inputText.trim();
+    if (toSend || attachedFiles.length > 0) {
+      onSendMessage(toSend, attachedFiles);
+      setInputText("");
+      setAttachedFiles([]);
+      initialPrefixRef.current = "";
+      finalTranscriptRef.current = "";
+    }
+  };
+
+  // Toggle Voice-to-Text Transcription via Web Speech API
+  const toggleListening = async () => {
+    if (isListening) {
+      handleStopListening();
+      return;
+    }
+
+    setSpeechError(null);
+
+    // Try requesting audio stream via getUserMedia to prompt native browser permission dialog if not yet granted
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err: any) {
+        console.warn("[Mic Permission] getUserMedia prompt error:", err);
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          setSpeechError("Akses mikrofon ditolak oleh browser.");
+          return;
+        }
+      }
+    }
+
+    startRecognition();
+  };
+
+  // Clean up recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+    };
+  }, []);
+
+  // Auto-dismiss speech error notification after 3.5 seconds
+  useEffect(() => {
+    if (speechError) {
+      const timer = setTimeout(() => setSpeechError(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [speechError]);
 
   // Monitor user scrolling to avoid jerking screen if user is reading previous code
   const handleContainerScroll = () => {
@@ -163,6 +374,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   const handleSend = () => {
     if ((!inputText.trim() && attachedFiles.length === 0) || isStreaming) return;
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      setIsListening(false);
+    }
     onSendMessage(inputText.trim(), attachedFiles);
     setInputText("");
     setAttachedFiles([]);
@@ -589,7 +806,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       onDrop={handleDrop}
     >
       {/* Top Header Bar (Clean Minimal Header) */}
-      <header className="flex items-center justify-between px-4 sm:px-6 py-2.5 sm:py-3 min-h-[50px] sm:min-h-[56px] bg-transparent z-10 shrink-0">
+      <header className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 min-h-[50px] sm:min-h-[56px] bg-transparent z-10 shrink-0 gap-2">
         <div className="flex items-center gap-2">
           {/* Smooth Sidebar Toggle with transparent background */}
           <button
@@ -620,43 +837,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 py-3 sm:py-6 space-y-4 sm:space-y-6 overscroll-contain"
       >
         {messages.length === 0 ? (
-          /* Claude AI-Inspired Welcome Screen with Groky Logo */
-          <div className="max-w-2xl mx-auto py-2 sm:py-8 px-2 sm:px-4 text-center space-y-4 sm:space-y-6 animate-in fade-in duration-300">
-            {/* Claude-style warm greeting header */}
-            <div className="space-y-4">
-              <div className="flex justify-center">
-                <img
-                  src="https://i.imgur.com/0J9yC8T.jpeg"
-                  alt="Groky AI"
-                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl object-cover shadow-md border-2 border-stone-200/80 dark:border-stone-700/80"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <h1 className="font-serif-editorial text-3xl sm:text-4xl lg:text-5xl font-normal tracking-tight text-stone-900 dark:text-stone-100">
-                {getClaudeGreeting()}, how can Groky help today?
-              </h1>
-              <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 max-w-lg mx-auto leading-relaxed">
-                Experience high-performance reasoning, real-time code generation, and media synthesis with free Groky intelligence models.
-              </p>
-            </div>
-
-            {/* Starter Suggestion Pills */}
-            <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl mx-auto pt-2">
-              {STARTER_PROMPTS.map((item, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => onSendMessage(item.prompt, [])}
-                  className="flex items-center gap-2.5 px-4 py-2 rounded-full border border-stone-200/90 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 hover:border-amber-500/70 hover:bg-amber-500/5 dark:hover:bg-stone-800/80 transition-all text-left shadow-2xs group cursor-pointer"
-                >
-                  <div className="w-6 h-6 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                    <i className={`${item.icon} text-[11px]`}></i>
-                  </div>
-                  <span className="text-xs font-medium text-stone-800 dark:text-stone-200 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                    {item.title}
-                  </span>
-                </button>
-              ))}
-            </div>
+          /* Clean Minimal Empty Workspace matching mobile view */
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[40vh] text-center p-4">
           </div>
         ) : (
           messages.map((msg) => {
@@ -806,11 +988,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Floating Input Capsule (Claude-inspired minimal) */}
       <div
         id="chat-input-wrapper"
-        className="px-3 sm:px-6 pb-2.5 sm:pb-4 pt-1 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0 z-20"
+        className="px-3 sm:px-6 pb-2.5 sm:pb-4 pt-1 bg-gradient-to-t from-white via-white/90 to-transparent dark:from-stone-950 dark:via-stone-950/90 shrink-0 z-20"
       >
         <div className="max-w-3xl mx-auto">
-          {/* Capsule Container: File preview is merged inside the placeholder container */}
-          <div className="relative rounded-2xl border border-stone-300 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-md focus-within:border-amber-500/80 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all p-3.5 sm:p-4 pb-2.5 sm:pb-3">
+          {/* Capsule Container */}
+          <div className="relative rounded-2xl border border-stone-300 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-md focus-within:border-amber-500/80 focus-within:ring-2 focus-within:ring-amber-500/20 transition-all p-3 sm:p-3.5">
             {/* Merged File Preview row inside the placeholder capsule */}
             {attachedFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2 pb-2.5 border-b border-stone-100 dark:border-stone-800">
@@ -866,138 +1048,238 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </div>
             )}
 
-            <textarea
-              id="chat-textarea-input"
-              ref={textareaRef}
-              rows={2}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => {
-                setTimeout(() => {
-                  messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                }, 200);
-              }}
-              placeholder="Ask Groky AI"
-              className="w-full bg-transparent text-sm sm:text-base text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 placeholder-stone-400 focus:outline-none resize-none font-sans-clean min-h-[56px] sm:min-h-[64px] max-h-48 leading-relaxed py-1.5"
-            />
+            {/* Subtle Speech error notification (Clean, no giant guides or action buttons) */}
+            {speechError && (
+              <div className="mb-2 px-3 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5">
+                  <i className="fa-solid fa-circle-exclamation text-amber-600 text-xs"></i>
+                  <span>{speechError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSpeechError(null)}
+                  className="p-1 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
+                >
+                  <i className="fa-solid fa-xmark text-xs"></i>
+                </button>
+              </div>
+            )}
 
-            {/* Bottom Actions inside Capsule without border-top */}
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <div className="flex items-center gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  multiple
-                  className="hidden"
-                />
+            {/* Conditional Rendering: If recording voice, render the animated soundwave visualizer capsule */}
+            {isListening ? (
+              <div className="flex items-center justify-between gap-2 sm:gap-3 py-1 min-h-[48px]">
+                {/* Close / Cancel Button */}
+                <button
+                  type="button"
+                  onClick={handleCancelListening}
+                  className="flex items-center justify-center w-8 h-8 rounded-full text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer shrink-0"
+                  title="Batalkan suara"
+                  aria-label="Batalkan"
+                >
+                  <i className="fa-solid fa-xmark text-sm sm:text-base"></i>
+                </button>
 
-                {/* Attachment Menu Popup with + Button */}
-                <div className="relative inline-block" ref={attachMenuRef}>
-                  <button
-                    id="attach-plus-btn"
-                    type="button"
-                    onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
-                    className="flex items-center justify-center w-7 h-7 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 transition-all cursor-pointer shadow-2xs"
-                    title="Add attachments or plugins"
-                  >
-                    <i
-                      className={`fa-solid fa-plus text-xs transition-transform duration-200 ${
-                        isAttachMenuOpen ? "rotate-45" : ""
-                      }`}
-                    ></i>
-                  </button>
-
-                  {isAttachMenuOpen && (
-                    <div className="absolute left-0 bottom-full mb-2.5 w-60 sm:w-68 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                      <div className="space-y-1">
-                        {/* Option 1: File (Upload files) */}
-                        <button
-                          id="attach-file-option-btn"
-                          type="button"
-                          onClick={() => {
-                            setIsAttachMenuOpen(false);
-                            fileInputRef.current?.click();
-                          }}
-                          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800/80 transition-colors cursor-pointer group"
-                        >
-                          <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 group-hover:bg-amber-500/15 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors shrink-0">
-                            <i className="fa-solid fa-paperclip text-sm"></i>
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-stone-800 dark:text-stone-100">
-                              File
-                            </div>
-                            <div className="text-[11px] text-stone-400 truncate">
-                              Upload documents, images, video & code
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* Option 2: Plugin (Coming soon) */}
-                        <div className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-left text-stone-400 dark:text-stone-500 bg-stone-50/50 dark:bg-stone-900/40 select-none">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-stone-100/70 dark:bg-stone-800/50 text-stone-400 dark:text-stone-500 shrink-0">
-                              <i className="fa-solid fa-puzzle-piece text-sm"></i>
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-xs font-semibold text-stone-500 dark:text-stone-400">
-                                Plugin
-                              </div>
-                              <div className="text-[11px] text-stone-400/80 dark:text-stone-500/80 truncate">
-                                Custom tools & extensions
-                              </div>
-                            </div>
-                          </div>
-                          <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-stone-200/80 dark:bg-stone-800 text-stone-600 dark:text-stone-400 whitespace-nowrap shrink-0">
-                            Coming soon
-                          </span>
-                        </div>
-                      </div>
+                {/* Center Soundwave Equalizer with running animation */}
+                <div className="flex-1 flex flex-col items-center justify-center min-w-0 px-2 select-none">
+                  {/* Realtime voice transcription preview text */}
+                  {(finalTranscriptRef.current || interimText) ? (
+                    <div className="text-xs text-stone-800 dark:text-stone-200 font-sans-clean max-w-full truncate px-1 pb-1 animate-in fade-in duration-100">
+                      <span>{finalTranscriptRef.current}</span>
+                      {interimText && <span className="text-stone-400 dark:text-stone-500 italic ml-1">{interimText}</span>}
                     </div>
-                  )}
+                  ) : null}
+
+                  {/* Soundwave Bars Waveform Animation */}
+                  <div className="flex items-center justify-center gap-[2.5px] sm:gap-[3.5px] h-8 w-full max-w-xs sm:max-w-sm overflow-hidden">
+                    {SOUNDWAVE_BARS.map((baseH, idx) => (
+                      <span
+                        key={idx}
+                        className="w-[2.5px] sm:w-[3px] rounded-full bg-stone-700 dark:bg-stone-300 animate-soundwave shrink-0"
+                        style={{
+                          height: `${baseH}px`,
+                          animationDelay: `${(idx % 16) * 0.07}s`,
+                          animationDuration: `${0.85 + (idx % 6) * 0.12}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
 
-                {/* Model Selector placed right beside Attachment button */}
-                <ModelSelector
-                  models={models}
-                  selectedModelId={selectedModelId}
-                  onSelectModel={onSelectModel}
-                  onOpenPricing={onOpenLanding}
-                />
-              </div>
+                {/* Right Action Buttons: Stop (⏹️) and Send (⬆️) */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleStopListening}
+                    className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors cursor-pointer shadow-2xs"
+                    title="Selesai bicara"
+                    aria-label="Selesai bicara"
+                  >
+                    <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-xs bg-stone-700 dark:bg-stone-200"></span>
+                  </button>
 
-              {/* Circular Send / Stop Button with FontAwesome */}
-              <div className="flex items-center gap-2">
-                {isStreaming ? (
                   <button
-                    id="stop-streaming-btn"
                     type="button"
-                    onClick={onStopStreaming}
-                    className="flex items-center justify-center w-9 h-9 rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 shadow-sm hover:opacity-90 transition-all cursor-pointer"
-                    title="Stop generation"
+                    onClick={handleSendVoice}
+                    className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:opacity-90 transition-all cursor-pointer shadow-sm"
+                    title="Kirim pesan"
+                    aria-label="Kirim"
                   >
-                    <i className="fa-solid fa-square text-xs"></i>
+                    <i className="fa-solid fa-arrow-up text-xs sm:text-sm"></i>
                   </button>
-                ) : (
-                  <button
-                    id="send-message-btn"
-                    type="button"
-                    disabled={!inputText.trim() && attachedFiles.length === 0}
-                    onClick={handleSend}
-                    className={`flex items-center justify-center w-9 h-9 rounded-full transition-all cursor-pointer ${
-                      inputText.trim() || attachedFiles.length > 0
-                        ? "bg-amber-600 hover:bg-amber-500 text-white shadow-sm"
-                        : "bg-stone-200 dark:bg-stone-800 text-stone-400 cursor-not-allowed"
-                    }`}
-                    title="Send message"
-                  >
-                    <i className="fa-solid fa-arrow-up text-xs"></i>
-                  </button>
-                )}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Idle / Typing Mode: Textarea + Bottom Action Bar */
+              <>
+                <textarea
+                  id="chat-textarea-input"
+                  ref={textareaRef}
+                  rows={2}
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onFocus={() => {
+                    setTimeout(() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }, 200);
+                  }}
+                  placeholder="Ask Groky AI"
+                  className="w-full bg-transparent text-sm sm:text-base text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 placeholder-stone-400 focus:outline-none resize-none font-sans-clean min-h-[56px] sm:min-h-[64px] max-h-48 leading-relaxed py-1"
+                />
+
+                {/* Bottom Actions inside Capsule */}
+                <div className="flex items-center justify-between pt-1 text-xs">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      multiple
+                      className="hidden"
+                    />
+
+                    {/* Attachment Menu Popup with + Button */}
+                    <div className="relative inline-block" ref={attachMenuRef}>
+                      <button
+                        id="attach-plus-btn"
+                        type="button"
+                        onClick={() => setIsAttachMenuOpen(!isAttachMenuOpen)}
+                        className="flex items-center justify-center w-7 h-7 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 transition-all cursor-pointer shadow-2xs"
+                        title="Add attachments"
+                      >
+                        <i
+                          className={`fa-solid fa-plus text-xs transition-transform duration-200 ${
+                            isAttachMenuOpen ? "rotate-45" : ""
+                          }`}
+                        ></i>
+                      </button>
+
+                      {isAttachMenuOpen && (
+                        <div className="absolute left-0 bottom-full mb-2.5 w-60 sm:w-68 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                          <div className="space-y-1">
+                            <button
+                              id="attach-file-option-btn"
+                              type="button"
+                              onClick={() => {
+                                setIsAttachMenuOpen(false);
+                                fileInputRef.current?.click();
+                              }}
+                              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800/80 transition-colors cursor-pointer group"
+                            >
+                              <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 group-hover:bg-amber-500/15 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors shrink-0">
+                                <i className="fa-solid fa-paperclip text-sm"></i>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-semibold text-stone-800 dark:text-stone-100">
+                                  File
+                                </div>
+                                <div className="text-[11px] text-stone-400 truncate">
+                                  Upload documents, images, video & code
+                                </div>
+                              </div>
+                            </button>
+
+                            <div className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-left text-stone-400 dark:text-stone-500 bg-stone-50/50 dark:bg-stone-900/40 select-none">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-stone-100/70 dark:bg-stone-800/50 text-stone-400 dark:text-stone-500 shrink-0">
+                                  <i className="fa-solid fa-puzzle-piece text-sm"></i>
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-semibold text-stone-500 dark:text-stone-400">
+                                    Plugin
+                                  </div>
+                                  <div className="text-[11px] text-stone-400/80 dark:text-stone-500/80 truncate">
+                                    Custom tools & extensions
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-stone-200/80 dark:bg-stone-800 text-stone-600 dark:text-stone-400 whitespace-nowrap shrink-0">
+                                Coming soon
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Model Selector placed right beside Attachment button */}
+                    <ModelSelector
+                      models={models}
+                      selectedModelId={selectedModelId}
+                      onSelectModel={onSelectModel}
+                      onOpenPricing={onOpenLanding}
+                    />
+                  </div>
+
+                  {/* Actions on right: Mic Voice-to-Text Button + Circular Send Button */}
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {/* Voice-to-Text Microphone Button using Web Speech API */}
+                    <button
+                      id="voice-mic-input-btn"
+                      type="button"
+                      onClick={toggleListening}
+                      className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 shadow-2xs transition-all cursor-pointer"
+                      title={
+                        !isSpeechSupported
+                          ? "Voice input is not supported in this browser"
+                          : "Mulai bicara (Input Suara)"
+                      }
+                      aria-label="Mulai bicara"
+                    >
+                      <i className="fa-solid fa-microphone text-xs sm:text-sm"></i>
+                    </button>
+
+                    {/* Circular Send / Stop Button */}
+                    {isStreaming ? (
+                      <button
+                        id="stop-streaming-btn"
+                        type="button"
+                        onClick={onStopStreaming}
+                        className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 shadow-sm hover:opacity-90 transition-all cursor-pointer"
+                        title="Stop generation"
+                      >
+                        <i className="fa-solid fa-square text-xs"></i>
+                      </button>
+                    ) : (
+                      <button
+                        id="send-message-btn"
+                        type="button"
+                        disabled={!inputText.trim() && attachedFiles.length === 0}
+                        onClick={handleSend}
+                        className={`flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full transition-all cursor-pointer ${
+                          inputText.trim() || attachedFiles.length > 0
+                            ? "bg-amber-600 hover:bg-amber-500 text-white shadow-sm"
+                            : "bg-stone-200 dark:bg-stone-800 text-stone-400 cursor-not-allowed"
+                        }`}
+                        title="Send message"
+                      >
+                        <i className="fa-solid fa-arrow-up text-xs"></i>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           {/* Disclaimer Text below Textarea */}
           <p className="text-[11px] text-stone-400 dark:text-stone-500 font-medium text-center mt-2">

@@ -39,6 +39,120 @@ export interface Message {
   isStreaming?: boolean;
   error?: string;
   reasoningTimeMs?: number;
+  // Multi-Agent Orchestrator metadata
+  agentPlan?: MultiAgentOrchestrationPlan;
+  activeAgentId?: string;
+  delegations?: AgentDelegationStep[];
+  selectedAgent?: string;
+}
+
+// MCP (Model Context Protocol) & Agent Gateway Types
+export type AgentPermission =
+  | "read_context"
+  | "execute_code"
+  | "network_search"
+  | "filesystem_access"
+  | "delegate_task";
+
+export interface MCPToolParameter {
+  type: string;
+  description: string;
+  enum?: string[];
+  default?: any;
+}
+
+export interface MCPToolDefinition {
+  name: string;
+  displayName: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, MCPToolParameter>;
+    required?: string[];
+  };
+  permissionRequired: AgentPermission;
+  agentId: string;
+}
+
+export interface MCPAgent {
+  id: string;
+  name: string;
+  role: string;
+  category: "orchestrator" | "coding" | "reasoning" | "data" | "security";
+  avatar: string;
+  icon: string;
+  badge: string;
+  status: "online" | "busy" | "idle" | "standby";
+  endpoint: string;
+  description: string;
+  capabilities: string[];
+  tools: MCPToolDefinition[];
+  grantedPermissions: AgentPermission[];
+  version: string;
+  latencyMs?: number;
+  totalExecutions: number;
+}
+
+export interface AgentDelegationStep {
+  id: string;
+  agentId: string;
+  agentName: string;
+  agentAvatar: string;
+  subtask: string;
+  status: "queued" | "running" | "calling_tool" | "completed" | "error";
+  toolCalled?: {
+    toolName: string;
+    params?: any;
+    result?: any;
+    status: "executing" | "success" | "denied" | "failed";
+  };
+  interAgentMessage?: {
+    fromAgentId: string;
+    toAgentId: string;
+    message: string;
+  };
+  outputSnippet?: string;
+  error?: string;
+  durationMs?: number;
+}
+
+export interface MultiAgentOrchestrationPlan {
+  primaryAgentId: string;
+  autoOrchestrate: boolean;
+  intentDetected?: "code_engineering" | "deep_research" | "data_analysis" | "general_orchestration";
+  confidenceScore?: number;
+  steps: AgentDelegationStep[];
+  activeAgentId?: string;
+  interAgentDialogues: Array<{
+    from: string;
+    to: string;
+    content: string;
+    timestamp: number;
+  }>;
+}
+
+export interface SharedAgentContext {
+  id: string;
+  sessionId: string;
+  lastUpdated: number;
+  environment: {
+    platform: string;
+    timezone: string;
+    language: string;
+  };
+  globalVariables: Record<string, any>;
+  interAgentMemory: Array<{
+    sourceAgent: string;
+    key: string;
+    value: string;
+    timestamp: number;
+  }>;
+  recentToolCalls: Array<{
+    toolName: string;
+    agentId: string;
+    timestamp: number;
+    status: string;
+  }>;
 }
 
 export interface Conversation {
@@ -74,6 +188,8 @@ export interface UserSettings {
   enable3DBackground: boolean;
   autoOpenArtifacts: boolean;
   codeFontSize: number;
+  groqApiKey?: string;
+  geminiApiKey?: string;
   openRouterApiKey?: string;
   supabaseUrl?: string;
   supabaseAnonKey?: string;

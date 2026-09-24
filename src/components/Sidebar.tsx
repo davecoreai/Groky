@@ -17,7 +17,6 @@ interface SidebarProps {
   onOpenSettings?: () => void;
   userAuth?: UserAuth | null;
   onLogout?: () => void;
-  onOpenAuth?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -35,7 +34,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   userAuth,
   onLogout,
-  onOpenAuth,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -146,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#FAF8F5] dark:bg-stone-900 border-r border-stone-200/80 dark:border-stone-800 select-none text-stone-800 dark:text-stone-200">
+    <div className="flex flex-col h-full bg-white dark:bg-stone-900 border-r border-stone-200/80 dark:border-stone-800 select-none text-stone-800 dark:text-stone-200">
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-stone-200/60 dark:border-stone-800/60">
         <div
@@ -207,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer: User Profile & Settings */}
       <div className="p-3 border-t border-stone-200/60 dark:border-stone-800/60 space-y-1">
-        {userAuth?.isLoggedIn ? (
+        {userAuth?.isLoggedIn && (
           <div className="flex items-center justify-between p-2 rounded-xl bg-stone-100/80 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-800/80">
             <div className="flex items-center gap-2 min-w-0">
               <img
@@ -234,16 +232,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
-        ) : (
-          onOpenAuth && (
-            <button
-              onClick={onOpenAuth}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl bg-amber-600/10 text-amber-700 dark:text-amber-400 hover:bg-amber-600/20 transition-colors text-xs font-semibold cursor-pointer"
-            >
-              <i className="fa-solid fa-user-plus text-xs shrink-0"></i>
-              <span className="truncate">Masuk / Daftar Akun</span>
-            </button>
-          )
         )}
 
         <button
@@ -270,7 +258,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={onToggleOpen}
         />
         <div
-          className={`relative w-72 max-w-[85vw] h-full shadow-2xl z-10 bg-[#FAF8F5] dark:bg-stone-900 transition-transform duration-300 ease-in-out ${
+          className={`relative w-72 max-w-[85vw] h-full shadow-2xl z-10 bg-white dark:bg-stone-900 transition-transform duration-300 ease-in-out ${
             isOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >

@@ -60,11 +60,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             {selectedModel.isLocked && (
               <i className="fa-solid fa-lock text-[10px] text-amber-500" title="Model Terkunci"></i>
             )}
-            {selectedModel.badge && (
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-mono uppercase">
-                {selectedModel.badge}
-              </span>
-            )}
           </span>
           <i
             className={`fa-solid fa-chevron-up text-[9px] text-stone-400 transition-transform duration-150 ${
@@ -116,11 +111,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                           <span className={`text-xs font-semibold truncate ${isLocked ? "text-stone-700 dark:text-stone-200" : ""}`}>
                             {model.name}
                           </span>
-                          {model.badge && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-mono uppercase">
-                              {model.badge}
-                            </span>
-                          )}
                         </div>
                         <p className="text-[11px] text-stone-400 truncate max-w-[200px]">
                           {model.description}

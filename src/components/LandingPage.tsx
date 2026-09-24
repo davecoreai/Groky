@@ -4,14 +4,13 @@ import { ParticleBackground } from "./ParticleBackground";
 
 interface LandingPageProps {
   onStartChat: () => void;
-  onOpenAuth: () => void;
+  onOpenAuth?: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onStartChat,
-  onOpenAuth,
   isDark,
   onToggleTheme,
 }) => {
@@ -254,11 +253,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="flex items-center gap-3">
             <button
-              onClick={onOpenAuth}
+              onClick={onStartChat}
               className="hidden md:inline-flex px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer items-center gap-2"
             >
-              <i className="fa-solid fa-right-to-bracket text-xs"></i>
-              <span>Masuk / Daftar</span>
+              <i className="fa-solid fa-sparkles text-xs"></i>
+              <span>Mulai Buka Groky</span>
             </button>
             <button
               onClick={onToggleTheme}
@@ -275,7 +274,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <section className="relative pt-10 pb-16 sm:pt-16 sm:pb-24 px-4 sm:px-6 max-w-5xl mx-auto text-center z-10">
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-medium">
-            <i className="fa-solid fa-atom text-amber-500"></i>
+            <i className="fa-solid fa-sparkles text-amber-500"></i>
             <span>Generasi Baru Kecerdasan Artifisial</span>
           </div>
 
@@ -292,11 +291,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
             <button
-              onClick={onOpenAuth}
+              onClick={onStartChat}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm shadow-md transition-all cursor-pointer hover:scale-[1.01]"
             >
-              <i className="fa-solid fa-sparkles text-xs"></i>
-              <span>Get Started</span>
+              <i className="fa-solid fa-bolt text-xs"></i>
+              <span>Mulai Sekarang</span>
             </button>
 
             <button

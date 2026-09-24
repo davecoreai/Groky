@@ -26,10 +26,8 @@ import { ArtifactViewer } from "./components/ArtifactViewer";
 import { ThreeCanvas } from "./components/ThreeCanvas";
 import { SchemaDocsModal } from "./components/SchemaDocsModal";
 import { DocumentPreviewModal } from "./components/DocumentPreviewModal";
-import { LandingPage } from "./components/LandingPage";
 import { DeviceMemoryModal } from "./components/DeviceMemoryModal";
 import { Settings } from "./components/Settings";
-import { AuthPage } from "./components/AuthPage";
 
 // Helper to extract clean conversation topic title from user prompt
 function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
@@ -67,7 +65,7 @@ function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
 }
 
 export default function App() {
-  const FREE_DEFAULT_MODEL = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "inclusionai/ling-3.0-flash-fin:free";
+  const FREE_DEFAULT_MODEL = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "thinkingmachines/inkling:free";
 
   // Requirement: Saat baru masuk / refresh halaman, default model selector ke model gratis
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -108,7 +106,7 @@ export default function App() {
   });
 
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
-  const [viewMode, setViewMode] = useState<"landing" | "auth" | "chat" | "settings">("landing");
+  const [viewMode, setViewMode] = useState<"chat" | "settings">("chat");
 
   // Apply UI font on mount & setting change
   useEffect(() => {
@@ -234,7 +232,7 @@ export default function App() {
         try {
           localStorage.removeItem("groky_user_auth");
         } catch {}
-        setViewMode("landing");
+        setViewMode("chat");
       }
     });
 
@@ -314,7 +312,7 @@ export default function App() {
   // New Chat (Previous streaming keeps running in the background)
   const handleNewChat = () => {
     const newId = `conv-${Date.now()}`;
-    const freeDefaultModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "inclusionai/ling-3.0-flash-fin:free";
+    const freeDefaultModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "thinkingmachines/inkling:free";
     const newConv: Conversation = {
       id: newId,
       title: "New Chat",
@@ -404,29 +402,27 @@ export default function App() {
     setIsStreaming(false);
   };
 
-  // Smooth Character Streaming Engine with High-Speed Adaptive Flow for Code Generation
+  // Ultra-Fast Low-Latency Fluid Streaming Engine
   const startTypewriterLoop = (targetConvId: string, assistantMessageId: string) => {
     if (typewriterTimerRef.current) {
       clearInterval(typewriterTimerRef.current);
     }
 
-    // High frequency 10ms tick for ultra-smooth 60-100fps fluid flow
+    // High frequency 8ms tick with dynamic adaptive burst draining
     typewriterTimerRef.current = setInterval(() => {
       const queue = textBufferQueueRef.current;
       if (queue.length === 0) return;
 
-      const currentText = currentAccumulatedTextRef.current;
-      // Detect if currently writing inside a code block (odd count of ``` backticks)
-      const tripleBacktickMatches = currentText.match(/```/g);
-      const isInsideCode = Boolean(tripleBacktickMatches && tripleBacktickMatches.length % 2 === 1);
-
       let chunkSize: number;
-      if (isInsideCode) {
-        // High-velocity, ultra-smooth character flow tailored specifically for code blocks
-        chunkSize = Math.max(4, Math.min(18, Math.ceil(queue.length / 5)));
+      if (queue.length > 50) {
+        // Large backlog burst: flush up to 40 characters so the screen never lags behind incoming stream
+        chunkSize = Math.min(queue.length, 40);
+      } else if (queue.length > 20) {
+        chunkSize = 16;
+      } else if (queue.length > 8) {
+        chunkSize = 8;
       } else {
-        // Smooth, elegant cadence for normal conversational text
-        chunkSize = Math.max(1, Math.min(6, Math.ceil(queue.length / 12)));
+        chunkSize = 3;
       }
 
       const charsToAppend = queue.splice(0, chunkSize).join("");
@@ -446,20 +442,20 @@ export default function App() {
             : c
         )
       );
-    }, 10);
+    }, 8);
   };
 
-  // Send Message with OpenRouter & Supabase Integration
+  // Send Message with OpenRouter & Supabase Integration & Multi-Agent Orchestration
   const handleSendMessage = async (userPrompt: string, files: AttachedFile[] = []) => {
     if ((!userPrompt.trim() && files.length === 0) || isStreaming) return;
 
     const targetConvId = activeConversation.id;
-    let targetModelId = activeConversation.modelId || "inclusionai/ling-3.0-flash-fin:free";
+    let targetModelId = activeConversation.modelId || "thinkingmachines/inkling:free";
 
     // Guard: Check if model is locked
     const activeModelObj = DEFAULT_MODELS.find((m) => m.id === targetModelId);
     if (activeModelObj?.isLocked) {
-      const freeModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "inclusionai/ling-3.0-flash-fin:free";
+      const freeModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "thinkingmachines/inkling:free";
       const userMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "user",
@@ -470,7 +466,7 @@ export default function App() {
       const lockedWarning: Message = {
         id: `msg-${Date.now() + 1}`,
         role: "assistant",
-        content: `🔒 **Model ${activeModelObj.name} Terkunci (${activeModelObj.badge})**\n\nModel ini merupakan fitur eksklusif paket Premium. Sesi chat Anda telah kami alihkan ke model gratis **Groky 2.5 Flash**. Silakan upgrade paket untuk mengakses model ${activeModelObj.name}.`,
+        content: `🔒 **Model ${activeModelObj.name} Terkunci (${activeModelObj.badge})**\n\nModel ini sedang tidak dapat diakses. Sesi chat dialihkan ke model standar **Groky 3.0 Mini**.`,
         timestamp: Date.now() + 1,
         model: freeModel,
       };
@@ -573,6 +569,8 @@ export default function App() {
           files,
           customConfig: {
             openRouterApiKey: settings.openRouterApiKey,
+            groqApiKey: settings.groqApiKey,
+            geminiApiKey: settings.geminiApiKey,
             apiKey: settings.customApiKey,
             baseUrl: settings.customEndpoint,
           },
@@ -609,6 +607,14 @@ export default function App() {
               if (data.error) {
                 throw new Error(data.error);
               }
+              if (data.modelSwitched && data.modelId) {
+                // Auto switch model on rate limit: synchronize conversation model
+                setConversations((prev) =>
+                  prev.map((c) =>
+                    c.id === targetConvId ? { ...c, modelId: data.modelId } : c
+                  )
+                );
+              }
               if (data.text) {
                 // Push characters into smooth typewriter queue
                 const chars = Array.from(data.text as string);
@@ -621,19 +627,14 @@ export default function App() {
         }
       }
 
-      // Wait briefly for typewriter buffer to finish unspooling smoothly
-      await new Promise<void>((resolve) => {
-        const checkDone = setInterval(() => {
-          if (textBufferQueueRef.current.length === 0) {
-            clearInterval(checkDone);
-            resolve();
-          }
-        }, 30);
-      });
-
+      // Immediately flush any remaining queue buffer with zero delay
       if (typewriterTimerRef.current) {
         clearInterval(typewriterTimerRef.current);
         typewriterTimerRef.current = null;
+      }
+      if (textBufferQueueRef.current.length > 0) {
+        currentAccumulatedTextRef.current += textBufferQueueRef.current.join("");
+        textBufferQueueRef.current = [];
       }
 
       let finalContent = currentAccumulatedTextRef.current;
@@ -751,35 +752,39 @@ export default function App() {
     setIsArtifactPanelOpen(true);
   };
 
-  if (viewMode === "landing") {
-    return (
-      <LandingPage
-        onStartChat={() => setViewMode("auth")}
-        onOpenAuth={() => setViewMode("auth")}
-        isDark={isDark}
-        onToggleTheme={handleToggleTheme}
-      />
-    );
-  }
+  // Delete all conversations handler for Kontrol Data menu
+  const handleDeleteAllConversations = () => {
+    const freshId = `conv-${Date.now()}`;
+    const freshChat: Conversation = {
+      id: freshId,
+      title: "New Chat",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isPinned: false,
+      modelId: FREE_DEFAULT_MODEL,
+      messages: [],
+    };
+    setConversations([freshChat]);
+    setActiveId(freshId);
+    try {
+      localStorage.setItem("groky_conversations", JSON.stringify([freshChat]));
+    } catch {}
+  };
 
-  if (viewMode === "auth") {
-    return (
-      <AuthPage
-        onSuccessAuth={(user) => {
-          setUserAuth(user);
-          try {
-            localStorage.setItem("groky_user_auth", JSON.stringify(user));
-          } catch {}
-          setViewMode("chat");
-        }}
-        onBackToLanding={() => setViewMode("landing")}
-        isDark={isDark}
-        onToggleTheme={handleToggleTheme}
-        settings={settings}
-        onUpdateSettings={handleSaveSettings}
-      />
-    );
-  }
+  // Export conversations handler
+  const handleExportAllData = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(conversations, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `groky-chat-history-${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (e) {
+      console.error("Export failed", e);
+    }
+  };
 
   if (viewMode === "settings") {
     return (
@@ -787,6 +792,12 @@ export default function App() {
         settings={settings}
         onUpdateSettings={handleSaveSettings}
         onClose={() => setViewMode("chat")}
+        onDeleteHistory={handleDeleteAllConversations}
+        onClearMemory={() => {
+          clearDeviceMemory();
+          setDeviceMemories([]);
+        }}
+        onExportData={handleExportAllData}
       />
     );
   }
@@ -798,7 +809,7 @@ export default function App() {
         height: viewportHeight ? `${viewportHeight}px` : "100dvh",
         maxHeight: viewportHeight ? `${viewportHeight}px` : "100dvh",
       }}
-      className="flex w-full overflow-hidden bg-[#FAF8F5] dark:bg-stone-950 font-sans-clean transition-colors duration-200 relative"
+      className="flex w-full overflow-hidden bg-white dark:bg-stone-950 font-sans-clean transition-colors duration-200 relative"
     >
       {/* 3D Ambient Visual Canvas */}
       <ThreeCanvas isDark={isDark} enabled={settings.enable3DBackground} />
@@ -822,7 +833,7 @@ export default function App() {
         isOpen={sidebarOpen}
         onToggleOpen={() => setSidebarOpen(!sidebarOpen)}
         isMobile={isMobile}
-        onOpenLanding={() => setViewMode("landing")}
+        onOpenLanding={() => handleNewChat()}
         onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
         onOpenSettings={() => setViewMode("settings")}
         userAuth={userAuth}
@@ -832,10 +843,9 @@ export default function App() {
             localStorage.removeItem("groky_user_auth");
           } catch {}
         }}
-        onOpenAuth={() => setViewMode("auth")}
       />
 
-      {/* Central Chat Arena (Minimalist Claude design) */}
+      {/* Central Chat Arena (Minimalist Claude design with Multi-Agent support) */}
       <main className="flex-1 flex flex-col h-full min-h-0 overflow-hidden relative z-10">
         <ChatArea
           messages={activeConversation?.messages || []}
@@ -849,7 +859,7 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenArtifact={handleOpenArtifact}
           onPreviewDocument={(file) => setPreviewFile(file)}
-          onOpenLanding={() => setViewMode("landing")}
+          onOpenLanding={() => handleNewChat()}
           onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
         />
       </main>

@@ -60,3 +60,19 @@
   opacity: 1 !important;
 }
 
+/* Soundwave Waveform Animation matching Voice Recorder Equalizer */
+@keyframes soundwave-wave {
+  0%, 100% {
+    height: 4px;
+    opacity: 0.35;
+  }
+  50% {
+    height: 28px;
+    opacity: 1;
+  }
+}
+
+.animate-soundwave {
+  animation: soundwave-wave 1.15s ease-in-out infinite;
+}
+

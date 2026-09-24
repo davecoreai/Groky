@@ -49,22 +49,21 @@ npm run build
 npm start
 \`\`\`
 
-### 4. Groky High-Performance Models
-- Groky 5.2 Astra (z-ai/glm-5.2:free)
-- Groky 4 Super [Beta] (google/gemma-4-31b-it:free)
-- Groky 3.7 Flow [Beta] (google/gemma-4-26b-a4b-it:free)
-- Groky 2.5 Flash (inclusionai/ling-3.0-flash-fin:free)
-- Groky 3.5 Flash (nvidia/nemotron-3-ultra-550b-a55b:free)`;
+### 4. Groky High-Performance Models (Auto-Failover Chain)
+- Groky 3.0 Mini (thinkingmachines/inkling:free)
+- Groky 3.1 Lite (openai/gpt-oss-safeguard-20b via Groq)
+- Groky 3.5 Pro (openai/gpt-oss-120b via Groq)
+- Groky 3.6 Flash (Gemini 3.5 Flash via Gemini API)`;
 
   const ARCHITECTURE_TEXT = `# Modular Architecture Overview
 
 ### Abstraction Layers:
-1. **Groky AI Gateway**:
-   - Groky 5.2 Astra (\`z-ai/glm-5.2:free\`)
-   - Groky 4 Super [Beta] (\`google/gemma-4-31b-it:free\`)
-   - Groky 3.7 Flow [Beta] (\`google/gemma-4-26b-a4b-it:free\`)
-   - Groky 2.5 Flash (\`inclusionai/ling-3.0-flash-fin:free\`)
-   - Groky 3.5 Flash (\`nvidia/nemotron-3-ultra-550b-a55b:free\`)
+1. **Groky Multi-Model Gateway & Auto-Switching Failover**:
+   - Groky 3.0 Mini (\`thinkingmachines/inkling:free\`) - OpenRouter
+   - Groky 3.1 Lite (\`openai/gpt-oss-safeguard-20b\`) - Groq API Console
+   - Groky 3.5 Pro (\`openai/gpt-oss-120b\`) - Groq API Console
+   - Groky 3.6 Flash (Gemini 3.5 Flash) - Google Gemini API
+   - Auto-switching to next model in sequence if rate limit / 429 quota is reached.
 
 2. **Real-Time Streaming Engine**:
    - Server-Sent Events (SSE) via \`/api/chat/stream\`

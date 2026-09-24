@@ -33,58 +33,47 @@ function getStorageKeys() {
 
 export const DEFAULT_MODELS: ModelOption[] = [
   {
-    id: "z-ai/glm-5.2:free",
-    name: "Groky 5.2 Astra",
-    provider: "Groky Cloud",
-    badge: "",
-    description: "Model unggulan dengan penalaran kompleks, analisis dokumen mendalam, dan arsitektur software skala besar.",
-    maxTokens: 131072,
-    isLocked: false,
-    supportsVision: true,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "google/gemma-4-31b-it:free",
-    name: "Groky 4 Super",
-    provider: "Groky Cloud",
-    badge: "Beta",
-    description: "Optimal untuk pemrosesan pemrograman tingkat lanjut, refactoring skrip, dan logika algoritma.",
-    maxTokens: 131072,
-    isLocked: false,
-    supportsVision: true,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "google/gemma-4-26b-a4b-it:free",
-    name: "Groky 3.7 Flow",
-    provider: "Groky Cloud",
-    badge: "Beta",
-    description: "Dioptimalkan untuk pembuatan komponen antarmuka interaktif, visualisasi data, dan alur agen.",
-    maxTokens: 131072,
-    isLocked: false,
-    supportsVision: true,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "inclusionai/ling-3.0-flash-fin:free",
-    name: "Groky 2.5 Flash",
-    provider: "Groky Cloud",
-    badge: "",
-    description: "Respon cepat berlatensi rendah untuk percakapan umum, tanya-jawab harian, dan ringkasan kilat.",
-    maxTokens: 131072,
-    isLocked: false,
-    supportsVision: true,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    name: "Groky 3.5 Flash",
-    provider: "Groky Cloud",
-    badge: "",
-    description: "Model serbaguna untuk pemrosesan teks terstruktur, logika matematika, dan penulisan dokumen.",
+    id: "thinkingmachines/inkling:free",
+    name: "Groky 3.0 Mini",
+    provider: "OpenRouter",
+    badge: "Free",
+    description: "Model ringkas dan gesit bertenaga ThinkingMachines Inkling untuk percakapan harian, tanya-jawab, dan respon kilat.",
     maxTokens: 131072,
     isLocked: false,
     supportsVision: false,
+    supportsCodeArtifacts: true,
+  },
+  {
+    id: "openai/gpt-oss-safeguard-20b",
+    name: "Groky 3.1 Lite",
+    provider: "Groq Cloud",
+    badge: "Groq 20B",
+    description: "Model inferensi ultra-cepat bertenaga Groq API Console dengan pengamanan terintegrasi dan efisiensi tinggi.",
+    maxTokens: 131072,
+    isLocked: false,
+    supportsVision: false,
+    supportsCodeArtifacts: true,
+  },
+  {
+    id: "openai/gpt-oss-120b",
+    name: "Groky 3.5 Pro",
+    provider: "Groq Cloud",
+    badge: "Groq 120B",
+    description: "Model skala 120B berperforma tinggi via Groq API Console untuk arsitektur software kompleks, pemrograman, dan reasoning mendalam.",
+    maxTokens: 131072,
+    isLocked: false,
+    supportsVision: true,
+    supportsCodeArtifacts: true,
+  },
+  {
+    id: "gemini-3.5-flash",
+    name: "Groky 3.6 Flash",
+    provider: "Google Gemini",
+    badge: "Gemini 3.5 Flash",
+    description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
+    maxTokens: 1048576,
+    isLocked: false,
+    supportsVision: true,
     supportsCodeArtifacts: true,
   },
 ];
@@ -110,6 +99,36 @@ export const AVAILABLE_FONTS = [
   { id: "Cabinet Grotesk", name: "Cabinet Grotesk", category: "Sans-Serif" },
   { id: "Sora", name: "Sora", category: "Sans-Serif" },
   { id: "Manrope", name: "Manrope", category: "Sans-Serif" },
+  { id: "Syne", name: "Syne", category: "Display" },
+  { id: "Bricolage Grotesque", name: "Bricolage Grotesque", category: "Grotesque" },
+  { id: "Instrument Serif", name: "Instrument Serif", category: "Serif" },
+  { id: "Cormorant Garamond", name: "Cormorant Garamond", category: "Serif" },
+  { id: "Newsreader", name: "Newsreader", category: "Serif" },
+  { id: "Space Mono", name: "Space Mono", category: "Monospace" },
+  { id: "IBM Plex Mono", name: "IBM Plex Mono", category: "Monospace" },
+  { id: "Source Code Pro", name: "Source Code Pro", category: "Monospace" },
+  { id: "Ubuntu Sans", name: "Ubuntu Sans", category: "Sans-Serif" },
+  { id: "Raleway", name: "Raleway", category: "Sans-Serif" },
+  { id: "Nunito", name: "Nunito", category: "Sans-Serif" },
+  { id: "Quicksand", name: "Quicksand", category: "Rounded" },
+  { id: "Figtree", name: "Figtree", category: "Sans-Serif" },
+  { id: "Urbanist", name: "Urbanist", category: "Sans-Serif" },
+  { id: "Geologica", name: "Geologica", category: "Tech" },
+  { id: "Onest", name: "Onest", category: "Sans-Serif" },
+  { id: "Readex Pro", name: "Readex Pro", category: "Geometric" },
+  { id: "Albert Sans", name: "Albert Sans", category: "Sans-Serif" },
+  { id: "Archivo", name: "Archivo", category: "Sans-Serif" },
+  { id: "Epilogue", name: "Epilogue", category: "Sans-Serif" },
+  { id: "Fraunces", name: "Fraunces", category: "Serif" },
+  { id: "Bodoni Moda", name: "Bodoni Moda", category: "Serif" },
+  { id: "Orbitron", name: "Orbitron", category: "Tech" },
+  { id: "Rajdhani", name: "Rajdhani", category: "Tech" },
+  { id: "Exo 2", name: "Exo 2", category: "Tech" },
+  { id: "Chakra Petch", name: "Chakra Petch", category: "Tech" },
+  { id: "Cinzel Decorative", name: "Cinzel Decorative", category: "Display" },
+  { id: "Righteous", name: "Righteous", category: "Display" },
+  { id: "Caveat", name: "Caveat", category: "Handwriting" },
+  { id: "Marcellus", name: "Marcellus", category: "Serif" },
 ];
 
 export function applyAppFont(fontName: string) {
@@ -123,7 +142,7 @@ export function applyAppFont(fontName: string) {
       const link = document.createElement("link");
       link.id = linkId;
       link.rel = "stylesheet";
-      const formattedFont = targetFont.replace(/\s+/g, "+");
+      const formattedFont = encodeURIComponent(targetFont);
       link.href = `https://fonts.googleapis.com/css2?family=${formattedFont}:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap`;
       document.head.appendChild(link);
     }
@@ -144,13 +163,15 @@ export function applyAppFont(fontName: string) {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  preferredModel: "inclusionai/ling-3.0-flash-fin:free",
+  preferredModel: "thinkingmachines/inkling:free",
   theme: "system",
   temperature: 0.7,
   systemPrompt: "You are Groky AI, an exceptionally intelligent AI Chatbot & Coding Assistant. When creating websites, web apps, or UI code, strictly do NOT use emojis anywhere in the code or interface, and always maintain clean, neat, highly-structured, and immaculate layouts.",
   enable3DBackground: false,
   autoOpenArtifacts: false,
   codeFontSize: 13,
+  groqApiKey: "",
+  geminiApiKey: "",
   openRouterApiKey: "",
   supabaseUrl: "",
   supabaseAnonKey: "",
@@ -167,7 +188,7 @@ const INITIAL_CONVERSATION: Conversation = {
   createdAt: Date.now() - 3600000,
   updatedAt: Date.now() - 3600000,
   isPinned: false,
-  modelId: "inclusionai/ling-3.0-flash-fin:free",
+  modelId: "thinkingmachines/inkling:free",
   messages: [
     {
       id: "msg-1",
@@ -178,13 +199,13 @@ const INITIAL_CONVERSATION: Conversation = {
     {
       id: "msg-2",
       role: "assistant",
-      model: "inclusionai/ling-3.0-flash-fin:free",
+      model: "thinkingmachines/inkling:free",
       content: `Welcome to **Groky AI** — an advanced, editorial AI Chatbot and 3D Coding environment crafted with aesthetic warmth, fluid streaming, and architectural rigor.
 
 ### Architectural Highlights
 1. **Real-time High-Velocity Streaming**: Smooth 60fps adaptive token delivery with server-sent events and automated multi-tier failovers.
 2. **Interactive 3D Artifacts**: Native support for Three.js, WebGL, shaders, and interactive simulations inside the sandboxed previewer.
-3. **Advanced AI Models**: Powered by Groky 5.2 Astra, Groky 4 Super [Beta], Groky 3.7 Flow [Beta], Groky 2.5 Flash, and Groky 3.5 Flash.
+3. **Advanced AI Models**: Powered by Groky 3.0 Mini, Groky 3.1 Lite (Groq), Groky 3.5 Pro (Groq 120B), and Groky 3.6 Flash (Gemini 3.5 Flash).
 4. **Multimodal Media & File Hub**: Upload documents, photos, audio, and video files with full-screen inspection.
 
 Here is an interactive 3D Three.js artifact with dynamic lighting and mouse orbit interaction:
@@ -360,7 +381,7 @@ export function loadConversations(): Conversation[] {
       const deviceInitialConv: Conversation = {
         ...INITIAL_CONVERSATION,
         id: `conv-${devId}-${Date.now().toString(36)}`,
-        modelId: "inclusionai/ling-3.0-flash-fin:free",
+        modelId: "thinkingmachines/inkling:free",
       };
       const initial = [deviceInitialConv];
       localStorage.setItem(keys.CONVERSATIONS, JSON.stringify(initial));
