@@ -465,11 +465,7 @@ export const Settings: React.FC<SettingsProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-2 flex items-center justify-between border-t border-stone-100 dark:border-stone-800">
-                  <div className="text-[11px] text-stone-400">
-                    <i className="fa-solid fa-triangle-exclamation text-amber-500 mr-1.5"></i>
-                    Data yang sudah dihapus tidak dapat dipulihkan kembali.
-                  </div>
+                <div className="pt-2 flex items-center justify-end border-t border-stone-100 dark:border-stone-800">
                   <button
                     type="button"
                     onClick={() => setIsDeleteModalOpen(true)}

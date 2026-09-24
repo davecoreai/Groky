@@ -128,35 +128,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       };
 
       recognition.onresult = (event: any) => {
-        let newlyFinalized = "";
-        let currentInterim = "";
+        let finalTrans = "";
+        let interimTrans = "";
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        // Recompute across all result chunks from index 0 to prevent repeating transcript bug on mobile
+        for (let i = 0; i < event.results.length; ++i) {
           const res = event.results[i];
           const text = res[0]?.transcript || "";
           if (res.isFinal) {
-            newlyFinalized += text;
+            finalTrans += text + " ";
           } else {
-            currentInterim += text;
+            interimTrans += text;
           }
         }
 
-        if (newlyFinalized) {
-          const trimmed = newlyFinalized.trim();
-          if (trimmed) {
-            if (finalTranscriptRef.current) {
-              finalTranscriptRef.current += " " + trimmed;
-            } else {
-              finalTranscriptRef.current = trimmed;
-            }
-          }
-        }
+        const trimmedFinal = finalTrans.trim();
+        const trimmedInterim = interimTrans.trim();
 
-        const safeInterim = currentInterim.trim();
-        setInterimText(safeInterim);
+        finalTranscriptRef.current = trimmedFinal;
+        setInterimText(trimmedInterim);
 
         // Merge cleanly without duplicate words or extra spaces
-        const speechCombined = [finalTranscriptRef.current, safeInterim].filter(Boolean).join(" ");
+        const speechCombined = [trimmedFinal, trimmedInterim].filter(Boolean).join(" ");
         const base = initialPrefixRef.current.trim();
         const combined = base ? (speechCombined ? `${base} ${speechCombined}` : base) : speechCombined;
         setInputText(combined);
@@ -282,11 +275,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (!scrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
     const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    // If within 90px of bottom, consider user "at bottom" and allow auto-pinning
-    isUserScrolledUpRef.current = distanceToBottom > 90;
+    // Only pause auto-scroll if user scrolled far up (> 180px)
+    isUserScrolledUpRef.current = distanceToBottom > 180;
   };
 
-  // Silky Smooth Pin-to-Bottom Auto-Scroll without conflicting animation frames
+  // Silky Smooth Pin-to-Bottom Auto-Scroll that never gets stuck or disabled prematurely
   useEffect(() => {
     const isNewMessage = messages.length > prevMessageCountRef.current;
     prevMessageCountRef.current = messages.length;
@@ -297,15 +290,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return;
     }
 
-    if (isStreaming && !isUserScrolledUpRef.current && scrollContainerRef.current) {
-      if (scrollRafRef.current) {
-        cancelAnimationFrame(scrollRafRef.current);
-      }
-      scrollRafRef.current = requestAnimationFrame(() => {
-        if (scrollContainerRef.current && !isUserScrolledUpRef.current) {
-          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    if (isStreaming && scrollContainerRef.current) {
+      if (!isUserScrolledUpRef.current) {
+        if (scrollRafRef.current) {
+          cancelAnimationFrame(scrollRafRef.current);
         }
-      });
+        scrollRafRef.current = requestAnimationFrame(() => {
+          if (scrollContainerRef.current && !isUserScrolledUpRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+          }
+        });
+      }
     }
 
     return () => {
@@ -541,23 +536,35 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Helper to render markdown parts with LaTeX, tables, headers, and code blocks
   const renderMessageContent = (content: string, messageId: string) => {
     // Regex matches closed code blocks and unclosed/streaming code blocks
-    const codeBlockRegex = /```([a-zA-Z0-9_-]+)?(?:\s+([^\n]+))?\n([\s\S]*?)(?:```|$)/g;
+    const codeBlockRegex = /```([a-zA-Z0-9_\-.:/]+)?(?:\s+([^\n]+))?\n([\s\S]*?)(?:```|$)/g;
 
     const parts: { type: "code" | "text"; lang?: string; title?: string; code?: string; text?: string }[] = [];
     let lastIndex = 0;
     let match;
 
     while ((match = codeBlockRegex.exec(content)) !== null) {
+      let precedingText = "";
       if (match.index > lastIndex) {
+        precedingText = content.slice(lastIndex, match.index);
         parts.push({
           type: "text",
-          text: content.slice(lastIndex, match.index),
+          text: precedingText,
         });
       }
 
       const lang = match[1] || "text";
-      const title = match[2];
+      let title = match[2];
       const code = match[3];
+
+      // If no explicit title, try detecting filename from the preceding text (e.g. 3. script.js, **style.css**, etc.)
+      if (!title && precedingText) {
+        const fileMatch = precedingText.match(
+          /(?:^|\s|\*|`|#|\d+\.\s*)([a-zA-Z0-9_\-]+\.(?:js|html|css|ts|tsx|jsx|py|json|sql|sh|php|java|cpp|c|go|rs|rb|md|svg))(?:\s|`|\*|:|$)/i
+        );
+        if (fileMatch && fileMatch[1]) {
+          title = fileMatch[1];
+        }
+      }
 
       parts.push({
         type: "code",
@@ -598,6 +605,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
       while (i < lines.length) {
         const line = lines[i];
+
+        // Filter out / remove raw horizontal rule divider (---, ***, ___) as requested
+        if (/^(\s*[-*_]\s*){3,}$/.test(line.trim())) {
+          i++;
+          continue;
+        }
 
         // Check if table starts here
         const isTableLine = (l: string) => l.trim().startsWith("|") && l.trim().endsWith("|");
