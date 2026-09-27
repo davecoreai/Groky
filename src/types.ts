@@ -38,6 +38,7 @@ export interface Message {
   artifacts?: Artifact[];
   isStreaming?: boolean;
   error?: string;
+  statusSubtitle?: string;
   reasoningTimeMs?: number;
   // Multi-Agent Orchestrator metadata
   agentPlan?: MultiAgentOrchestrationPlan;

@@ -545,7 +545,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Helper to render markdown parts with LaTeX, tables, headers, and code blocks
   const renderMessageContent = (content: string, messageId: string) => {
     // Regex matches closed code blocks and unclosed/streaming code blocks
-    const codeBlockRegex = /```([a-zA-Z0-9_\-.:/]+)?(?:\s+([^\n]+))?\n([\s\S]*?)(?:```|$)/g;
+    const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)(?:```|$)/g;
 
     const parts: { type: "code" | "text"; lang?: string; title?: string; code?: string; text?: string }[] = [];
     let lastIndex = 0;
@@ -561,9 +561,71 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         });
       }
 
-      const lang = match[1] || "text";
-      let title = match[2];
-      const code = match[3];
+      const headerLine = (match[1] || "").trim();
+      let rawCode = match[2] || "";
+      let lang = "text";
+      let title: string | undefined = undefined;
+
+      // Check if headerLine itself contains code (e.g. ```<!DOCTYPE html> or ```<html...)
+      if (
+        headerLine.startsWith("<") ||
+        headerLine.toLowerCase().includes("doctype") ||
+        headerLine.includes("function") ||
+        headerLine.includes("import ") ||
+        headerLine.includes("const ")
+      ) {
+        // The first line was actually code! Restore it to the code content so nothing is cut off
+        rawCode = `${headerLine}\n${rawCode}`;
+        lang = headerLine.toLowerCase().includes("doctype") || headerLine.startsWith("<") ? "html" : "javascript";
+        title = undefined;
+      } else if (headerLine) {
+        // Parse "lang:title" or "lang title" or pure "lang"
+        let l = headerLine;
+        let t = "";
+
+        if (headerLine.includes(":")) {
+          const split = headerLine.split(":");
+          l = split[0].trim();
+          t = split.slice(1).join(":").trim();
+        } else if (headerLine.includes(" ")) {
+          const split = headerLine.split(" ");
+          l = split[0].trim();
+          t = split.slice(1).join(" ").trim();
+        }
+
+        // Check if `t` was accidentally a code fragment (like <!DOCTYPE html>)
+        if (t.startsWith("<") || t.toLowerCase().includes("doctype") || t.includes("=") || t.includes("{") || t.includes("}")) {
+          rawCode = `${t}\n${rawCode}`;
+          t = "";
+        }
+
+        lang = l.toLowerCase().replace(/^(language-|lang-)/, "").trim();
+        if (t && t.length <= 35 && !t.includes("<") && !t.includes(">") && !t.includes("!")) {
+          title = t;
+        }
+      }
+
+      // Auto-detect HTML from code content if language is generic or text
+      const trimmedCode = rawCode.trim().toLowerCase();
+      if (
+        lang === "text" ||
+        !lang ||
+        lang === "markup" ||
+        lang === "xml" ||
+        lang.includes("doctype") ||
+        lang.includes("html")
+      ) {
+        if (
+          trimmedCode.startsWith("<!doctype html") ||
+          trimmedCode.startsWith("<html") ||
+          trimmedCode.includes("<head>") ||
+          trimmedCode.includes("<body") ||
+          lang.includes("doctype") ||
+          lang.includes("html")
+        ) {
+          lang = "html";
+        }
+      }
 
       // If no explicit title, try detecting filename from the preceding text (e.g. 3. script.js, **style.css**, etc.)
       if (!title && precedingText) {
@@ -579,7 +641,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         type: "code",
         lang,
         title,
-        code,
+        code: rawCode,
       });
 
       lastIndex = match.index + match[0].length;
@@ -934,6 +996,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <div className="whitespace-pre-wrap">{msg.content}</div>
                       )}
                     </div>
+
+                    {/* Status Subtitle below user bubble if generation was stopped/failed */}
+                    {msg.statusSubtitle && (
+                      <div className="flex items-center justify-end gap-1 text-[11px] text-rose-500 dark:text-rose-400 font-medium px-1 select-none">
+                        <i className="fa-solid fa-circle-exclamation text-[10px]"></i>
+                        <span>{msg.statusSubtitle}</span>
+                      </div>
+                    )}
 
                     {/* User action bar */}
                     <div className="flex items-center gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity text-[11px] text-stone-400">

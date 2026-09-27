@@ -443,6 +443,34 @@ export default function App() {
       rafRenderIdRef.current = null;
     }
     setIsStreaming(false);
+
+    // Clean up empty assistant placeholder (removes Thinking...) and set 'Gagal mengirim pesan' on the user bubble
+    setConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === activeId) {
+          const msgs = [...c.messages];
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg && lastMsg.role === "assistant" && (!lastMsg.content || !lastMsg.content.trim())) {
+            // Remove empty assistant thinking placeholder
+            msgs.pop();
+          } else if (lastMsg && lastMsg.role === "assistant") {
+            // Keep partial text if any, but mark streaming as done
+            msgs[msgs.length - 1] = { ...lastMsg, isStreaming: false };
+          }
+
+          // Mark the last user message with statusSubtitle: "Gagal mengirim pesan"
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === "user") {
+              msgs[i] = { ...msgs[i], statusSubtitle: "Gagal mengirim pesan" };
+              break;
+            }
+          }
+
+          return { ...c, messages: msgs };
+        }
+        return c;
+      })
+    );
   };
 
   // Send Message with OpenRouter & Supabase Integration & Multi-Agent Orchestration

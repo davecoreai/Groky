@@ -45,7 +45,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
     URL.revokeObjectURL(url);
   };
 
-  // Safe sandbox preview document
+  // Safe sandbox preview document with full scrolling support
   const previewHtml = useMemo(() => {
     if (!artifact) return "";
     if (artifact.type === "svg") {
@@ -54,8 +54,9 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
         <html>
         <head>
           <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
-            body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f0f12; color: #fff; }
+            body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f0f12; color: #fff; overflow: auto; -webkit-overflow-scrolling: touch; }
             svg { max-width: 90%; max-height: 90vh; }
           </style>
         </head>
@@ -64,7 +65,45 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
       `;
     }
 
-    // HTML / CSS / JS Sandbox with Three.js & Tailwind support
+    const trimmed = artifact.code.trim();
+    const isFullHtml =
+      trimmed.toLowerCase().startsWith("<!doctype html") ||
+      trimmed.toLowerCase().startsWith("<html") ||
+      trimmed.toLowerCase().includes("<head>") ||
+      trimmed.toLowerCase().includes("<body");
+
+    // CSS ensuring the website is 100% scrollable on all screen sizes & devices
+    const scrollStyle = `
+      <style id="preview-scroll-fix">
+        html {
+          height: auto !important;
+          min-height: 100% !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          scroll-behavior: smooth;
+        }
+        body {
+          min-height: 100vh !important;
+          overflow-x: hidden !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+        }
+      </style>
+    `;
+
+    if (isFullHtml) {
+      let html = artifact.code;
+      if (html.includes("</head>")) {
+        html = html.replace("</head>", `${scrollStyle}</head>`);
+      } else if (html.includes("<body")) {
+        html = html.replace(/<body([^>]*)>/, `<body$1>${scrollStyle}`);
+      } else {
+        html = `${scrollStyle}${html}`;
+      }
+      return html;
+    }
+
+    // HTML / CSS / JS Sandbox for code fragments
     return `
       <!DOCTYPE html>
       <html>
@@ -75,11 +114,19 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
         <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+        ${scrollStyle}
         <style>
           * { box-sizing: border-box; }
-          html, body { margin: 0; padding: 0; width: 100%; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0d0d11; color: #f3f4f6; overflow: hidden; }
+          body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0d0d11;
+            color: #f3f4f6;
+          }
           canvas { display: block; width: 100% !important; height: 100% !important; outline: none; }
         </style>
       </head>
@@ -89,6 +136,15 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
       </html>
     `;
   }, [artifact?.code, artifact?.type]);
+
+  const cleanTitle = useMemo(() => {
+    if (!artifact) return "";
+    let t = artifact.title || "";
+    if (t.toLowerCase().includes("doctype") || t.startsWith("<") || t === "text") {
+      return artifact.language === "html" ? "index.html" : `${artifact.language} artifact`;
+    }
+    return t;
+  }, [artifact]);
 
   if (!artifact) return null;
 
@@ -110,7 +166,7 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
             <i className="fa-solid fa-code text-xs"></i>
           </div>
           <div className="truncate">
-            <h3 className="text-xs font-semibold text-stone-200 truncate">{artifact.title}</h3>
+            <h3 className="text-xs font-semibold text-stone-200 truncate">{cleanTitle}</h3>
             <span className="text-[10px] uppercase font-mono tracking-wider text-amber-500/80 font-medium">
               {artifact.language} Artifact
             </span>
@@ -219,7 +275,8 @@ export const ArtifactViewer: React.FC<ArtifactViewerProps> = ({ artifact, onClos
                 key={reloadKey}
                 srcDoc={previewHtml}
                 title={artifact.title}
-                sandbox="allow-scripts allow-modals allow-forms allow-same-origin"
+                sandbox="allow-scripts allow-modals allow-forms allow-same-origin allow-popups allow-downloads"
+                allow="autoplay; fullscreen; microphone; camera; geolocation; accelerometer; gyroscope"
                 className="w-full h-full border-0 bg-stone-900"
               />
             </div>
