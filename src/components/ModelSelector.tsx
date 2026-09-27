@@ -113,8 +113,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                     {isSelected ? (
                       <i className="fa-solid fa-check text-xs text-amber-600 dark:text-amber-400 shrink-0"></i>
                     ) : isLocked ? (
-                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 flex items-center gap-1 shrink-0">
-                        <i className="fa-solid fa-lock text-[8px]"></i> Lock
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 shrink-0">
+                        <i className="fa-solid fa-wrench text-[8px]"></i> {model.badge === "Perbaikan" ? "Perbaikan" : "Lock"}
                       </span>
                     ) : null}
                   </button>
@@ -125,19 +125,23 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         )}
       </div>
 
-      {/* LOCKED MODEL MODAL */}
+      {/* LOCKED / MAINTENANCE MODEL MODAL */}
       {lockedModalModel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="relative w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 shadow-2xl space-y-4 text-center">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-xl shadow-inner">
-              <i className="fa-solid fa-lock"></i>
+              <i className={lockedModalModel.badge === "Perbaikan" ? "fa-solid fa-wrench" : "fa-solid fa-lock"}></i>
             </div>
             <div className="space-y-1">
               <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100 font-serif-editorial">
-                Model {lockedModalModel.name} Terkunci
+                {lockedModalModel.badge === "Perbaikan"
+                  ? `Model ${lockedModalModel.name} Sedang Dalam Perbaikan`
+                  : `Model ${lockedModalModel.name} Terkunci`}
               </h3>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                Model ini merupakan fitur eksklusif untuk <strong className="text-amber-600 dark:text-amber-400">{lockedModalModel.badge}</strong>. Silakan upgrade paket Anda untuk membuka akses penuh ke engine ini.
+                {lockedModalModel.badge === "Perbaikan"
+                  ? "Model ini sementara dinonaktifkan karena sedang dalam tahap pemeliharaan sistem. Silakan pilih Groky 3.6 Flash atau Groky 3.1 Lite."
+                  : `Model ini merupakan fitur eksklusif untuk ${lockedModalModel.badge}. Silakan upgrade paket Anda untuk membuka akses penuh.`}
               </p>
             </div>
             <div className="pt-2 flex flex-col gap-2">
@@ -146,19 +150,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 onClick={() => {
                   setLockedModalModel(null);
                   setIsOpen(false);
-                  if (onOpenPricing) onOpenPricing();
                 }}
-                className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-xs shadow-md transition-all cursor-pointer"
               >
-                <i className="fa-solid fa-sparkles text-xs"></i>
-                <span>Lihat Paket Premium</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLockedModalModel(null)}
-                className="w-full py-2 px-4 rounded-xl bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-medium text-xs hover:bg-stone-200 dark:hover:bg-stone-700 transition-all cursor-pointer"
-              >
-                Gunakan Model Gratis
+                Tutup &amp; Gunakan Model Lain
               </button>
             </div>
           </div>

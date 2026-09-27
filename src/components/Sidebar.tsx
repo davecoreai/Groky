@@ -13,7 +13,6 @@ interface SidebarProps {
   isOpen: boolean;
   onToggleOpen: () => void;
   isMobile: boolean;
-  onOpenLanding?: () => void;
   onOpenDeviceMemory?: () => void;
   onOpenSettings?: () => void;
   userAuth?: UserAuth | null;
@@ -27,10 +26,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewChat,
   onRenameConversation,
   onDeleteConversation,
+  onTogglePinConversation,
   isOpen,
   onToggleOpen,
   isMobile,
-  onOpenLanding,
   onOpenDeviceMemory,
   onOpenSettings,
   userAuth,
@@ -93,7 +92,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </form>
         ) : (
           <div className="flex items-center gap-2.5 truncate pr-6 w-full">
-            <i className="fa-regular fa-message text-[11px] text-stone-400 shrink-0"></i>
+            {conv.isPinned ? (
+              <i className="fa-solid fa-thumbtack text-[11px] text-amber-500 rotate-45 shrink-0" title="Disematkan"></i>
+            ) : (
+              <i className="fa-regular fa-message text-[11px] text-stone-400 shrink-0"></i>
+            )}
             <span className="truncate text-xs">{conv.title}</span>
           </div>
         )}
@@ -117,14 +120,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               {/* Context Dropdown Menu */}
               {isMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-32 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 shadow-lg py-1 z-30 animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 top-full mt-1 w-36 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 shadow-lg py-1 z-30 animate-in fade-in zoom-in-95 duration-100">
+                  <button
+                    onClick={() => {
+                      onTogglePinConversation(conv.id);
+                      setMenuOpenId(null);
+                    }}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700/60 text-left cursor-pointer"
+                  >
+                    <i className={`fa-solid fa-thumbtack ${conv.isPinned ? "text-amber-500 rotate-45" : "text-stone-400"} text-[10px] w-3 text-center`}></i>
+                    <span>{conv.isPinned ? "Lepas Sematan" : "Sematkan"}</span>
+                  </button>
                   <button
                     onClick={() => startRename(conv)}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700/60 text-left cursor-pointer"
                   >
-                    <i className="fa-solid fa-pen text-[10px]"></i>
-                    <span>Rename</span>
+                    <i className="fa-solid fa-pen text-[10px] w-3 text-center"></i>
+                    <span>Ganti Nama</span>
                   </button>
+                  <div className="h-px bg-stone-200/70 dark:bg-stone-700/70 my-0.5 mx-2"></div>
                   <button
                     onClick={() => {
                       onDeleteConversation(conv.id);
@@ -132,8 +146,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left cursor-pointer"
                   >
-                    <i className="fa-solid fa-trash-can text-[10px]"></i>
-                    <span>Delete</span>
+                    <i className="fa-solid fa-trash-can text-[10px] w-3 text-center"></i>
+                    <span>Hapus</span>
                   </button>
                 </div>
               )}
@@ -149,9 +163,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-stone-200/60 dark:border-stone-800/60">
         <div
-          onClick={onOpenLanding}
+          onClick={onNewChat}
           className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
-          title="Buka Landing Page Groky AI"
+          title="Groky AI"
         >
           <GrokyLogo className="h-8 w-8 rounded-xl shadow-xs" />
           <div>
@@ -179,11 +193,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
 
-      {/* Conversations List - Only show chats that have messages */}
+      {/* Conversations List - Prioritize pinned chats at the top */}
       <div className="flex-1 overflow-y-auto px-2 space-y-1 py-1 text-xs">
-        <div className="px-2.5 py-1 text-[11px] font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
-          <span>Riwayat Chat</span>
-        </div>
         {(() => {
           const historyConvs = conversations.filter(
             (c) => c.messages && c.messages.length > 0
@@ -195,7 +206,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             );
           }
-          return historyConvs.map((conv) => renderConversationItem(conv));
+
+          const pinnedConvs = historyConvs
+            .filter((c) => c.isPinned)
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+          const unpinnedConvs = historyConvs
+            .filter((c) => !c.isPinned)
+            .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+          return (
+            <>
+              {/* Pinned Section */}
+              {pinnedConvs.length > 0 && (
+                <div className="space-y-1 mb-2">
+                  <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <i className="fa-solid fa-thumbtack text-[9px] rotate-45"></i>
+                    <span>Disematkan ({pinnedConvs.length})</span>
+                  </div>
+                  {pinnedConvs.map((conv) => renderConversationItem(conv))}
+                </div>
+              )}
+
+              {/* General Conversation History */}
+              <div className="space-y-1">
+                {pinnedConvs.length > 0 ? (
+                  <div className="px-2.5 pt-2 pb-1 text-[11px] font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                    <span>Riwayat Lainnya</span>
+                  </div>
+                ) : (
+                  <div className="px-2.5 py-1 text-[11px] font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+                    <span>Riwayat Chat</span>
+                  </div>
+                )}
+                {unpinnedConvs.map((conv) => renderConversationItem(conv))}
+              </div>
+            </>
+          );
         })()}
       </div>
 

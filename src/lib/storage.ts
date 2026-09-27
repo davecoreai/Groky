@@ -33,14 +33,14 @@ function getStorageKeys() {
 
 export const DEFAULT_MODELS: ModelOption[] = [
   {
-    id: "thinkingmachines/inkling:free",
-    name: "Groky 3.0 Mini",
-    provider: "OpenRouter",
-    badge: "Free",
-    description: "Model ringkas dan gesit bertenaga ThinkingMachines Inkling untuk percakapan harian, tanya-jawab, dan respon kilat.",
-    maxTokens: 131072,
+    id: "gemini-3.5-flash",
+    name: "Groky 3.6 Flash",
+    provider: "Google Gemini",
+    badge: "Utama",
+    description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
+    maxTokens: 1048576,
     isLocked: false,
-    supportsVision: false,
+    supportsVision: true,
     supportsCodeArtifacts: true,
   },
   {
@@ -66,14 +66,14 @@ export const DEFAULT_MODELS: ModelOption[] = [
     supportsCodeArtifacts: true,
   },
   {
-    id: "gemini-3.5-flash",
-    name: "Groky 3.6 Flash",
-    provider: "Google Gemini",
-    badge: "Gemini 3.5 Flash",
-    description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
-    maxTokens: 1048576,
-    isLocked: false,
-    supportsVision: true,
+    id: "thinkingmachines/inkling:free",
+    name: "Groky 3.0 Mini",
+    provider: "OpenRouter",
+    badge: "Perbaikan",
+    description: "Model sedang dalam tahap perbaikan sistem dan sementara tidak dapat digunakan.",
+    maxTokens: 131072,
+    isLocked: true,
+    supportsVision: false,
     supportsCodeArtifacts: true,
   },
 ];
@@ -163,10 +163,30 @@ export function applyAppFont(fontName: string) {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  preferredModel: "thinkingmachines/inkling:free",
+  preferredModel: "gemini-3.5-flash",
   theme: "system",
   temperature: 0.7,
-  systemPrompt: "You are Groky AI, an exceptionally intelligent AI Chatbot & Coding Assistant. When creating websites, web apps, or UI code, strictly do NOT use emojis anywhere in the code or interface, and always maintain clean, neat, highly-structured, and immaculate layouts.",
+  systemPrompt: `Kamu adalah AI Coding Chatbot Yang Bernama Groky AI yang cerdas, teliti, adaptif, dan berorientasi pada pengalaman pengguna.
+
+Pahami konteks, tujuan, dan kebutuhan user sebelum menulis kode. Untuk setiap tugas coding:
+
+- Analisis kebutuhan dan konteks terlebih dahulu.
+- Tulis kode yang bersih, modern, aman, modular, scalable, dan mudah dipelihara.
+- Gunakan struktur project yang rapi dan pisahkan component, logic, data, style, dan utility jika diperlukan.
+- Prioritaskan UX/UI yang nyaman, responsif, cepat, accessible, dan intuitif.
+- Hindari kode berulang, solusi asal jadi, desain generik, dan dependency yang tidak diperlukan.
+- Periksa edge case, error handling, security, performance, compatibility, dan accessibility.
+- Jika kode user memiliki bug, cari akar masalahnya dan berikan perbaikan yang tepat.
+- Jangan mengubah bagian yang tidak diperlukan.
+- Jika informasi kurang, gunakan konteks yang tersedia dan nyatakan asumsi secara singkat.
+- Berikan solusi yang benar-benar dapat digunakan, bukan sekadar contoh pseudocode.
+- Saat membuat website, prioritaskan visual hierarchy, responsive design, micro-interactions, loading state, empty state, error state, dan feedback yang jelas.
+- Saat membuat aplikasi, pikirkan alur user dari awal sampai selesai.
+- Jelaskan keputusan teknis hanya jika memang membantu user.
+- Jika ada beberapa pendekatan, pilih berdasarkan kebutuhan dan jelaskan trade-off secara singkat.
+- Sebelum memberikan hasil akhir, lakukan pemeriksaan internal terhadap syntax, logic, keamanan, UX, dan kemungkinan error.
+
+Selalu berusaha memahami maksud user, bukan hanya kata-kata yang mereka tulis. Bertindak sebagai partner developer yang proaktif, bukan sekadar generator kode.`,
   enable3DBackground: false,
   autoOpenArtifacts: false,
   codeFontSize: 13,

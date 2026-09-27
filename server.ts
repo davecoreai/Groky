@@ -1208,17 +1208,17 @@ export interface SystemModelSpec {
 
 export const ORDERED_SYSTEM_MODELS: SystemModelSpec[] = [
   {
-    id: "thinkingmachines/inkling:free",
-    name: "Groky 3.0 Mini",
-    provider: "OpenRouter",
-    badge: "Free",
-    description: "Model ringkas dan gesit bertenaga ThinkingMachines Inkling untuk percakapan harian, tanya-jawab, dan respon kilat.",
-    maxTokens: 131072,
+    id: "gemini-3.5-flash",
+    name: "Groky 3.6 Flash",
+    provider: "Google Gemini",
+    badge: "Utama",
+    description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
+    maxTokens: 1048576,
     isLocked: false,
-    supportsVision: false,
+    supportsVision: true,
     supportsCodeArtifacts: true,
-    apiType: "openrouter",
-    apiModel: "thinkingmachines/inkling:free",
+    apiType: "gemini",
+    apiModel: "gemini-2.5-flash",
   },
   {
     id: "openai/gpt-oss-safeguard-20b",
@@ -1247,17 +1247,17 @@ export const ORDERED_SYSTEM_MODELS: SystemModelSpec[] = [
     apiModel: "openai/gpt-oss-120b",
   },
   {
-    id: "gemini-3.5-flash",
-    name: "Groky 3.6 Flash",
-    provider: "Google Gemini",
-    badge: "Gemini 3.5 Flash",
-    description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
-    maxTokens: 1048576,
-    isLocked: false,
-    supportsVision: true,
+    id: "thinkingmachines/inkling:free",
+    name: "Groky 3.0 Mini",
+    provider: "OpenRouter",
+    badge: "Perbaikan",
+    description: "Model sedang dalam tahap perbaikan sistem dan sementara tidak dapat digunakan.",
+    maxTokens: 131072,
+    isLocked: true,
+    supportsVision: false,
     supportsCodeArtifacts: true,
-    apiType: "gemini",
-    apiModel: "gemini-2.5-flash",
+    apiType: "openrouter",
+    apiModel: "thinkingmachines/inkling:free",
   },
 ];
 
@@ -1298,7 +1298,7 @@ async function streamFromGroq({
   for (const candidate of groqCandidates) {
     try {
       const timeoutController = new AbortController();
-      const timeoutId = setTimeout(() => timeoutController.abort(), 4000);
+      const timeoutId = setTimeout(() => timeoutController.abort(), 15000);
 
       const combinedSignal = signal
         ? (AbortSignal.any ? AbortSignal.any([signal, timeoutController.signal]) : signal)
@@ -1315,7 +1315,7 @@ async function streamFromGroq({
           messages,
           stream: true,
           temperature: Math.min(Math.max(Number(temperature) || 0.7, 0), 1.5),
-          max_tokens: 16384,
+          max_tokens: 32768,
         }),
         signal: combinedSignal,
       });
@@ -1426,7 +1426,7 @@ async function streamFromOpenRouter({
   for (const slug of Array.from(new Set(openRouterSlugs))) {
     try {
       const timeoutController = new AbortController();
-      const timeoutId = setTimeout(() => timeoutController.abort(), 3500);
+      const timeoutId = setTimeout(() => timeoutController.abort(), 15000);
 
       const combinedSignal = signal
         ? (AbortSignal.any ? AbortSignal.any([signal, timeoutController.signal]) : signal)
@@ -1446,7 +1446,7 @@ async function streamFromOpenRouter({
           messages,
           stream: true,
           temperature: Math.min(Math.max(Number(temperature) || 0.7, 0), 1.5),
-          max_tokens: 16384,
+          max_tokens: 32768,
         }),
         signal: combinedSignal,
       });
@@ -1542,7 +1542,7 @@ apiRouter.get("/models", (_req: Request, res: Response) => {
 apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Response) => {
   const {
     messages = [],
-    model = "thinkingmachines/inkling:free",
+    model = "gemini-3.5-flash",
     systemPrompt = "",
     temperature = 0.7,
     files = [],
@@ -1725,39 +1725,31 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
 - Format numerical information cleanly in structured markdown tables or bulleted breakdowns.`;
     }
 
-    const defaultSystemPrompt = `You are an Elite Staff Frontend Architect, UI/UX Lead, and Full-Stack Web Engineer. Your mission is to craft visually stunning, full-featured, modern, responsive, and complete production web applications and code.
+    const defaultSystemPrompt = `Kamu adalah AI Coding Chatbot Yang Bernama Groky AI yang cerdas, teliti, adaptif, dan berorientasi pada pengalaman pengguna.
 
-FULL-FEATURED PRODUCTION ARCHITECTURE (CRITICAL):
-- Never build half-finished, barebones, or empty websites. Every website must be a rich, complete experience featuring:
-  1. Sticky Top Navigation Bar: Brand logo, navigation menu links, quick search/CTA button, and working mobile drawer menu with hamburger toggle.
-  2. High-Impact Hero Section: Compelling headline, engaging subtitle, dual action CTAs ("Mulai Sekarang", "Lihat Jadwal / Demo"), trust badges, and live counter statistics (e.g. 5000+ Member, 20+ Expert Trainers).
-  3. Interactive Core Feature Sections: Domain-specific interactive widgets (e.g. for Gym: BMI calculator, live class schedule with Day filter tabs Mon-Sun, searchable trainer cards with modal details, interactive membership pricing toggle Monthly/Yearly with tier cards and booking modal).
-  4. Gallery / Feature Showcase: High-definition Unsplash photo grids with modern hover overlays.
-  5. Testimonials & Social Proof: Review cards with ratings, member avatars from Unsplash/DiceBear, and transformation stats.
-  6. FAQ Accordion: Interactive collapsible questions & answers.
-  7. Rich Footer: Newsletter form, operating hours, quick links, social media links, and copyright.
-- Avoid Awkward Blank Spaces: Use consistent, polished section padding (py-12 md:py-20). Never put arbitrary huge heights (like h-screen on sub-sections) that leave large empty dark voids.
+Pahami konteks, tujuan, dan kebutuhan user sebelum menulis kode. Untuk setiap tugas coding:
 
-MODERN DESIGN & AESTHETICS:
-- Never generate plain, outdated, 1990s-style, or barebones black-and-white websites.
-- Modern Styling Engine: When generating single-file HTML solutions, ALWAYS leverage Tailwind CSS via CDN (<script src="https://cdn.tailwindcss.com"></script>) and FontAwesome 6 (<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">) plus Google Fonts (e.g. Plus Jakarta Sans, Inter, Outfit, Syne).
-- Color & Lighting: Use sleek modern palettes (rich dark mode themes with deep charcoal/slate/zinc backgrounds, subtle border-stone-800/80 outlines, vibrant accent gradients like amber, emerald, indigo, violet, cyan, or rose).
-- Card & Container Polishing: Use modern rounded-2xl or rounded-3xl cards, subtle border highlights, glassmorphism (backdrop-blur-md), and smooth hover lift animations (hover:-translate-y-1 transition-all duration-300).
-- Imagery & Avatars: NEVER output broken local image tags (like <img src="foto.jpg"> or alt-only images)! ALWAYS use high-resolution, thematic Unsplash images with direct CDN URLs (e.g., https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1200 for gym, https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150 for portraits) or DiceBear avatars (https://api.dicebear.com/7.x/avataaars/svg?seed=Alex), paired with graceful CSS/SVG fallbacks.
-- Typography: Strong typographic scale with high-character headings, balanced subtitles, and high-readability body copy.
+- Analisis kebutuhan dan konteks terlebih dahulu.
+- Tulis kode yang bersih, modern, aman, modular, scalable, dan mudah dipelihara.
+- Gunakan struktur project yang rapi dan pisahkan component, logic, data, style, dan utility jika diperlukan.
+- Prioritaskan UX/UI yang nyaman, responsif, cepat, accessible, dan intuitif.
+- Hindari kode berulang, solusi asal jadi, desain generik, dan dependency yang tidak diperlukan.
+- Periksa edge case, error handling, security, performance, compatibility, dan accessibility.
+- Jika kode user memiliki bug, cari akar masalahnya dan berikan perbaikan yang tepat.
+- Jangan mengubah bagian yang tidak diperlukan.
+- Jika informasi kurang, gunakan konteks yang tersedia dan nyatakan asumsi secara singkat.
+- Berikan solusi yang benar-benar dapat digunakan, bukan sekadar contoh pseudocode.
+- Saat membuat website, prioritaskan visual hierarchy, responsive design, micro-interactions, loading state, empty state, error state, dan feedback yang jelas.
+- Saat membuat aplikasi, pikirkan alur user dari awal sampai selesai.
+- Jelaskan keputusan teknis hanya jika memang membantu user.
+- Jika ada beberapa pendekatan, pilih berdasarkan kebutuhan dan jelaskan trade-off secara singkat.
+- Sebelum memberikan hasil akhir, lakukan pemeriksaan internal terhadap syntax, logic, keamanan, UX, dan kemungkinan error.
 
-RICH INTERACTIVITY & SCROLLING:
-- Full Interactivity: Every button, filter tab, search bar, dropdown, modal, and drawer must have active, working JavaScript event listeners.
-- Mobile Responsiveness & Scrolling: Ensure page flows naturally with smooth touch scrolling and responsive layouts across all mobile, tablet, and desktop breakpoints.
+Selalu berusaha memahami maksud user, bukan hanya kata-kata yang mereka tulis. Bertindak sebagai partner developer yang proaktif, bukan sekadar generator kode.
 
-100% CODE COMPLETENESS (STRICT MANDATE):
-- NEVER truncate code, never use "// rest of code", and never leave placeholders.
-- Always output the complete, 100% runnable HTML/CSS/JS solution enclosed inside a single standard \`\`\`html ... \`\`\` block starting with standard \`\`\`html on its own line followed by a newline and <!DOCTYPE html>.
-- The output must be immediately previewable and interactive in the artifact viewer without any missing logic.
-
-ADDITIONAL SYSTEM CAPABILITIES:
-- Device Memory & Learning: You have access to persistent device memory context. If the user asks you to remember a fact or preference, append \`[MEMORY_SAVE: Key | Value]\` at the end of your response so it is saved to the user's device memory.
-- Text, Code & Artifact Focus: You communicate with crystal-clear writing, Markdown formatting, code snippets, Mermaid diagrams, SVG markup, or interactive HTML5/WebGL artifacts when requested. You do not generate raster image frames or image canvas blocks.`;
+PANDUAN TAMBAHAN EKSEKUSI TEKNIS:
+- Jika membuat solusi website atau aplikasi web tunggal interaktif, bungkus kode lengkap dan mandiri di dalam blok \`\`\`html ... \`\`\` agar dapat langsung dijalankan di artifact viewer.
+- Jangan pernah memotong kode di tengah jalan atau menggunakan placeholder seperti '// ... kode lainnya'.`;
 
     const fullSystemInstruction = systemPrompt
       ? `${defaultSystemPrompt}\n\n[UNIVERSAL INSTRUCTION ADHERENCE MANDATE]:\n- You MUST strictly and obediently follow all user instructions, language preferences, formatting directives, and constraints.\n- When requested to create code or build websites/apps, provide 100% complete, fully implemented code without skipping, placeholders, or cutting off.\n- Respond naturally in the language used by the user (Indonesian when addressed in Indonesian).\n\nCustom User Directive:\n${systemPrompt}${agentDirective}`
@@ -1821,7 +1813,7 @@ ADDITIONAL SYSTEM CAPABILITIES:
     const geminiConfig: any = {
       systemInstruction: fullSystemInstruction,
       temperature: Math.min(Math.max(Number(temperature) || 0.7, 0), 1),
-      maxOutputTokens: 16384,
+      maxOutputTokens: 65536,
     };
     if (isSearchGroundingRequested) {
       geminiConfig.tools = [{ googleSearch: {} }];
@@ -1912,16 +1904,40 @@ ADDITIONAL SYSTEM CAPABILITIES:
         }
       } catch (err: any) {
         lastFailureError = err;
-        const isRateLimit =
-          err?.isRateLimit ||
-          err?.status === 429 ||
-          err?.message?.includes("429") ||
-          err?.message?.includes("quota") ||
-          err?.message?.includes("rate_limit") ||
-          err?.message?.includes("RESOURCE_EXHAUSTED");
-
+        console.warn(`[Streaming Fallback] Model '${candidate.name}' failed (${err?.message || "network error"}). Trying next candidate...`);
         // Put failing/rate-limited model on 60s cooldown to optimize TTFT for next chats
         globalRateLimitCooldowns.set(candidate.id, Date.now() + 60000);
+      }
+    }
+
+    // Ultimate safeguard: if all candidate loop failed, attempt direct Gemini flash fallback
+    if (!successModel) {
+      try {
+        const ai = getGenAI();
+        const activeModel = await executeStreamWithFallback({
+          ai,
+          preferredModel: "gemini-2.5-flash",
+          contents: geminiContents,
+          config: geminiConfig,
+          sendEvent,
+        });
+        if (activeModel) {
+          successModel = {
+            id: "gemini-3.5-flash",
+            name: "Groky 3.6 Flash",
+            provider: "Google Gemini",
+            badge: "Gemini",
+            description: "Fallback engine",
+            maxTokens: 1048576,
+            isLocked: false,
+            supportsVision: true,
+            supportsCodeArtifacts: true,
+            apiType: "gemini",
+            apiModel: "gemini-2.5-flash",
+          };
+        }
+      } catch (fallbackErr: any) {
+        lastFailureError = fallbackErr;
       }
     }
 

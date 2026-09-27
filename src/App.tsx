@@ -68,7 +68,7 @@ function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
 }
 
 export default function App() {
-  const FREE_DEFAULT_MODEL = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "thinkingmachines/inkling:free";
+  const FREE_DEFAULT_MODEL = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "gemini-3.5-flash";
 
   // Requirement: Saat baru masuk / refresh halaman, default model selector ke model gratis
   const [conversations, setConversations] = useState<Conversation[]>(() => {
@@ -149,6 +149,8 @@ export default function App() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const rafRenderIdRef = useRef<number | null>(null);
   const currentAccumulatedTextRef = useRef<string>("");
+  const displayedLengthRef = useRef<number>(0);
+  const isStreamActiveRef = useRef<boolean>(false);
 
   // Fetch Supabase configuration from backend and sync it to settings
   useEffect(() => {
@@ -386,16 +388,24 @@ export default function App() {
 
   // Pin / Unpin Conversation
   const handleTogglePinConversation = (id: string) => {
-    setConversations((prev) =>
-      prev.map((c) => {
+    setConversations((prev) => {
+      const updatedList = prev.map((c) => {
         if (c.id === id) {
-          const updated = { ...c, isPinned: !c.isPinned };
+          const nextPinned = !c.isPinned;
+          const updated = { ...c, isPinned: nextPinned, updatedAt: Date.now() };
           saveConversationToSupabase(updated, settings).catch(() => {});
           return updated;
         }
         return c;
-      })
-    );
+      });
+
+      // Keep pinned conversations strictly at the top, sorted by latest activity
+      return [...updatedList].sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+      });
+    });
   };
 
   // Select Model
@@ -411,25 +421,63 @@ export default function App() {
     handleSaveSettings({ ...settings, preferredModel: modelId });
   };
 
-  // Instant Real-Time RAF Streaming Renderer
-  const scheduleFastRender = (targetConvId: string, assistantMessageId: string) => {
+  // Silky-Smooth 60FPS Fluid Text Streaming Engine
+  const scheduleSmoothFluidRender = (targetConvId: string, assistantMessageId: string) => {
     if (rafRenderIdRef.current) return;
-    rafRenderIdRef.current = requestAnimationFrame(() => {
-      rafRenderIdRef.current = null;
-      const text = currentAccumulatedTextRef.current;
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === targetConvId
-            ? {
-                ...c,
-                messages: c.messages.map((m) =>
-                  m.id === assistantMessageId ? { ...m, content: text } : m
-                ),
-              }
-            : c
-        )
-      );
-    });
+
+    const tick = () => {
+      const target = currentAccumulatedTextRef.current;
+      let currentLen = displayedLengthRef.current;
+
+      if (currentLen < target.length) {
+        const remaining = target.length - currentLen;
+        // Dynamically scaled step size for butter-smooth fluidity:
+        // - Small backlog (steady typing): 1-3 chars/frame gives beautiful typewriter fluidity
+        // - Medium backlog: 4-8 chars/frame
+        // - High backlog (large code blocks from fast models): smoothly accelerates so latency is 0
+        let step = 2;
+        if (remaining > 500) {
+          step = Math.ceil(remaining / 3);
+        } else if (remaining > 200) {
+          step = Math.ceil(remaining / 5);
+        } else if (remaining > 80) {
+          step = Math.ceil(remaining / 8);
+        } else if (remaining > 30) {
+          step = 4;
+        } else if (remaining > 10) {
+          step = 3;
+        } else if (remaining > 3) {
+          step = 2;
+        } else {
+          step = 1;
+        }
+
+        currentLen = Math.min(target.length, currentLen + step);
+        displayedLengthRef.current = currentLen;
+        const currentSlice = target.slice(0, currentLen);
+
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === targetConvId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === assistantMessageId ? { ...m, content: currentSlice } : m
+                  ),
+                }
+              : c
+          )
+        );
+      }
+
+      if (isStreamActiveRef.current || displayedLengthRef.current < currentAccumulatedTextRef.current.length) {
+        rafRenderIdRef.current = requestAnimationFrame(tick);
+      } else {
+        rafRenderIdRef.current = null;
+      }
+    };
+
+    rafRenderIdRef.current = requestAnimationFrame(tick);
   };
 
   // Stop Streaming
@@ -438,10 +486,12 @@ export default function App() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+    isStreamActiveRef.current = false;
     if (rafRenderIdRef.current) {
       cancelAnimationFrame(rafRenderIdRef.current);
       rafRenderIdRef.current = null;
     }
+    displayedLengthRef.current = currentAccumulatedTextRef.current.length;
     setIsStreaming(false);
 
     // Clean up empty assistant placeholder (removes Thinking...) and set 'Gagal mengirim pesan' on the user bubble
@@ -554,6 +604,8 @@ export default function App() {
 
     setIsStreaming(true);
     currentAccumulatedTextRef.current = "";
+    displayedLengthRef.current = 0;
+    isStreamActiveRef.current = true;
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -647,9 +699,9 @@ export default function App() {
                 );
               }
               if (data.text) {
-                // Direct real-time RAF stream rendering: zero artificial delay
+                // Smooth fluid stream rendering
                 currentAccumulatedTextRef.current += data.text;
-                scheduleFastRender(targetConvId, assistantMessageId);
+                scheduleSmoothFluidRender(targetConvId, assistantMessageId);
               }
             } catch (err) {
               // Ignore invalid JSON chunk
@@ -664,9 +716,22 @@ export default function App() {
           const data = JSON.parse(sseBuffer.trim().slice(6).trim());
           if (data.text) {
             currentAccumulatedTextRef.current += data.text;
-            scheduleFastRender(targetConvId, assistantMessageId);
+            scheduleSmoothFluidRender(targetConvId, assistantMessageId);
           }
         } catch {}
+      }
+
+      isStreamActiveRef.current = false;
+      // Allow fluid animation to smoothly catch up before finalizing
+      let catchUpWaitCount = 0;
+      while (displayedLengthRef.current < currentAccumulatedTextRef.current.length && catchUpWaitCount < 15) {
+        const remaining = currentAccumulatedTextRef.current.length - displayedLengthRef.current;
+        if (remaining > 15) {
+          await new Promise((resolve) => setTimeout(resolve, 16));
+          catchUpWaitCount++;
+        } else {
+          break;
+        }
       }
 
       // Cancel any pending RAF and finalize immediately
@@ -674,6 +739,7 @@ export default function App() {
         cancelAnimationFrame(rafRenderIdRef.current);
         rafRenderIdRef.current = null;
       }
+      displayedLengthRef.current = currentAccumulatedTextRef.current.length;
 
       let finalContent = currentAccumulatedTextRef.current;
 
@@ -896,7 +962,6 @@ export default function App() {
         isOpen={sidebarOpen}
         onToggleOpen={() => setSidebarOpen(!sidebarOpen)}
         isMobile={isMobile}
-        onOpenLanding={() => handleNewChat()}
         onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
         onOpenSettings={() => setViewMode("settings")}
         userAuth={userAuth}
@@ -924,8 +989,10 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onOpenArtifact={handleOpenArtifact}
           onPreviewDocument={(file) => setPreviewFile(file)}
-          onOpenLanding={() => handleNewChat()}
           onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
+          activeConversation={activeConversation}
+          onTogglePin={handleTogglePinConversation}
+          onDeleteConversation={handleDeleteConversation}
         />
       </main>
 

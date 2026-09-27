@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import katex from "katex";
-import { Message, AttachedFile, ModelOption } from "../types";
+import { Message, AttachedFile, ModelOption, Conversation } from "../types";
 import { CodeBlock } from "./CodeBlock";
 import { ModelSelector } from "./ModelSelector";
 import { mergeSpeechChunks } from "../lib/speechUtils";
@@ -22,8 +22,10 @@ interface ChatAreaProps {
   onToggleSidebar: () => void;
   onOpenArtifact: (code: string, language: string, title?: string) => void;
   onPreviewDocument: (file: AttachedFile) => void;
-  onOpenLanding?: () => void;
   onOpenDeviceMemory?: () => void;
+  activeConversation?: Conversation | null;
+  onTogglePin?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
 }
 
 // KaTeX LaTeX formula renderer
@@ -51,8 +53,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onToggleSidebar,
   onOpenArtifact,
   onPreviewDocument,
-  onOpenLanding,
   onOpenDeviceMemory,
+  activeConversation,
+  onTogglePin,
+  onDeleteConversation,
 }) => {
   const [inputText, setInputText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -80,6 +84,96 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const isUserScrolledUpRef = useRef(false);
   const prevMessageCountRef = useRef(messages.length);
   const scrollRafRef = useRef<number | null>(null);
+
+  // Header ":" Menu State (Bagikan, Sematkan, Hapus)
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close header menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        headerMenuRef.current &&
+        !headerMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsHeaderMenuOpen(false);
+      }
+    };
+    if (isHeaderMenuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [isHeaderMenuOpen]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  };
+
+  const handleShare = async () => {
+    setIsHeaderMenuOpen(false);
+    if (!activeConversation) return;
+
+    const chatUrl = typeof window !== "undefined" ? window.location.href : "";
+    const conversationTitle = activeConversation.title || "Percakapan Groky AI";
+
+    if (navigator.share && typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: conversationTitle,
+          text: `Percakapan dengan Groky AI: ${conversationTitle}`,
+          url: chatUrl,
+        });
+        showToast("Obrolan berhasil dibagikan!");
+        return;
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    // Fallback: Copy link to clipboard
+    try {
+      if (typeof window !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(chatUrl);
+        showToast("Tautan obrolan disalin ke papan klip!");
+      }
+    } catch {
+      showToast("Gagal menyalin tautan");
+    }
+  };
+
+  const handleTogglePin = () => {
+    setIsHeaderMenuOpen(false);
+    if (!activeConversation || !onTogglePin) return;
+    onTogglePin(activeConversation.id);
+    showToast(
+      activeConversation.isPinned
+        ? "Sematan dilepas dari obrolan"
+        : "Obrolan berhasil disematkan ke atas"
+    );
+  };
+
+  const handleDelete = () => {
+    setIsHeaderMenuOpen(false);
+    if (!activeConversation || !onDeleteConversation) return;
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = () => {
+    setIsDeleteModalOpen(false);
+    if (activeConversation && onDeleteConversation) {
+      onDeleteConversation(activeConversation.id);
+      showToast("Obrolan berhasil dihapus");
+    }
+  };
 
   // Web Speech API browser compatibility check
   const isSpeechSupported =
@@ -903,6 +997,73 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <i className="fa-solid fa-bars text-sm"></i>
           </button>
         </div>
+
+        {/* Right Corner Menu Button: ":" with Dropdown (Bagikan, Sematkan, Hapus) - Only appears when conversation exists */}
+        {messages.length > 0 && (
+          <div className="relative" ref={headerMenuRef}>
+            <button
+              id="header-chat-menu-btn"
+              type="button"
+              onClick={() => setIsHeaderMenuOpen((prev) => !prev)}
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/60 dark:hover:bg-stone-800/60 transition-all cursor-pointer relative"
+              title="Menu Obrolan"
+              aria-label="Menu Obrolan"
+            >
+              <i className="fa-solid fa-ellipsis-vertical text-base"></i>
+              {activeConversation?.isPinned && (
+                <span
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-stone-900"
+                  title="Obrolan ini disematkan"
+                />
+              )}
+            </button>
+
+            {/* Dropdown Menu */}
+            {isHeaderMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-44 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800 shadow-xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100 text-xs">
+                {/* Bagikan */}
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800/70 text-left transition-colors cursor-pointer"
+                >
+                  <i className="fa-solid fa-share-nodes text-stone-500 dark:text-stone-400 text-xs w-4 text-center"></i>
+                  <span className="font-medium">Bagikan</span>
+                </button>
+
+                {/* Sematkan */}
+                <button
+                  type="button"
+                  onClick={handleTogglePin}
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800/70 text-left transition-colors cursor-pointer"
+                >
+                  <i
+                    className={`fa-solid fa-thumbtack ${
+                      activeConversation?.isPinned
+                        ? "text-amber-500 rotate-45"
+                        : "text-stone-500 dark:text-stone-400"
+                    } text-xs w-4 text-center`}
+                  ></i>
+                  <span className="font-medium">
+                    {activeConversation?.isPinned ? "Lepas Sematan" : "Sematkan"}
+                  </span>
+                </button>
+
+                <div className="h-px bg-stone-200/70 dark:bg-stone-800/80 my-1 mx-2"></div>
+
+                {/* Hapus */}
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="flex items-center gap-2.5 w-full px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-left transition-colors cursor-pointer"
+                >
+                  <i className="fa-regular fa-trash-can text-rose-600 dark:text-rose-400 text-xs w-4 text-center"></i>
+                  <span className="font-medium">Hapus</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Drag & drop overlay indicator */}
@@ -1300,7 +1461,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       models={models}
                       selectedModelId={selectedModelId}
                       onSelectModel={onSelectModel}
-                      onOpenPricing={onOpenLanding}
                     />
                   </div>
 
@@ -1444,6 +1604,56 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 />
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-14 right-4 sm:right-6 z-50 px-4 py-2 rounded-xl bg-stone-900 text-white dark:bg-white dark:text-stone-900 text-xs font-medium shadow-lg animate-in fade-in slide-in-from-top-2 duration-150 flex items-center gap-2">
+          <i className="fa-solid fa-circle-check text-emerald-400 dark:text-emerald-600 text-xs"></i>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Hapus Obrolan */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-lg">
+                <i className="fa-solid fa-trash-can text-rose-600 dark:text-rose-400"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                  Hapus Obrolan Ini?
+                </h3>
+                <p className="text-xs text-stone-500">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+              Seluruh riwayat pesan dalam obrolan{" "}
+              <strong>&ldquo;{activeConversation?.title || "ini"}&rdquo;</strong>{" "}
+              akan dihapus secara permanen.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                Ya, Hapus
+              </button>
+            </div>
           </div>
         </div>
       )}
