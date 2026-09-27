@@ -3,6 +3,7 @@ import katex from "katex";
 import { Message, AttachedFile, ModelOption } from "../types";
 import { CodeBlock } from "./CodeBlock";
 import { ModelSelector } from "./ModelSelector";
+import { mergeSpeechChunks } from "../lib/speechUtils";
 
 const SOUNDWAVE_BARS = [
   6, 12, 18, 24, 16, 22, 28, 20, 26, 14, 20, 26, 30, 24, 18, 26,
@@ -128,30 +129,38 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       };
 
       recognition.onresult = (event: any) => {
-        let finalTrans = "";
-        let interimTrans = "";
+        const finalChunks: string[] = [];
+        const interimChunks: string[] = [];
 
-        // Recompute across all result chunks from index 0 to prevent repeating transcript bug on mobile
+        // Collect all chunks emitted by SpeechRecognition
         for (let i = 0; i < event.results.length; ++i) {
           const res = event.results[i];
-          const text = res[0]?.transcript || "";
+          const text = (res[0]?.transcript || "").trim();
+          if (!text) continue;
+
           if (res.isFinal) {
-            finalTrans += text + " ";
+            finalChunks.push(text);
           } else {
-            interimTrans += text;
+            interimChunks.push(text);
           }
         }
 
-        const trimmedFinal = finalTrans.trim();
-        const trimmedInterim = interimTrans.trim();
+        // Merge using deduplicating and cumulative-aware algorithm
+        const mergedFinal = mergeSpeechChunks(finalChunks);
+        const mergedInterim = mergeSpeechChunks(interimChunks);
 
-        finalTranscriptRef.current = trimmedFinal;
-        setInterimText(trimmedInterim);
+        const allSegments = [mergedFinal, mergedInterim].filter(Boolean);
+        const mergedAll = mergeSpeechChunks(allSegments);
 
-        // Merge cleanly without duplicate words or extra spaces
-        const speechCombined = [trimmedFinal, trimmedInterim].filter(Boolean).join(" ");
+        finalTranscriptRef.current = mergedFinal;
+        setInterimText(mergedInterim);
+
+        // Prepend any text the user had already typed before pressing mic
         const base = initialPrefixRef.current.trim();
-        const combined = base ? (speechCombined ? `${base} ${speechCombined}` : base) : speechCombined;
+        const combined = base
+          ? (mergedAll ? `${base} ${mergedAll}` : base)
+          : mergedAll;
+
         setInputText(combined);
       };
 
@@ -1211,25 +1220,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                 </div>
                               </div>
                             </button>
-
-                            <div className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-left text-stone-400 dark:text-stone-500 bg-stone-50/50 dark:bg-stone-900/40 select-none">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-stone-100/70 dark:bg-stone-800/50 text-stone-400 dark:text-stone-500 shrink-0">
-                                  <i className="fa-solid fa-puzzle-piece text-sm"></i>
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-xs font-semibold text-stone-500 dark:text-stone-400">
-                                    Plugin
-                                  </div>
-                                  <div className="text-[11px] text-stone-400/80 dark:text-stone-500/80 truncate">
-                                    Custom tools & extensions
-                                  </div>
-                                </div>
-                              </div>
-                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-stone-200/80 dark:bg-stone-800 text-stone-600 dark:text-stone-400 whitespace-nowrap shrink-0">
-                                Coming soon
-                              </span>
-                            </div>
                           </div>
                         </div>
                       )}

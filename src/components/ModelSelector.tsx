@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ModelOption } from "../types";
+import { GrokyLogo } from "./GrokyLogo";
 
 interface ModelSelectorProps {
   models: ModelOption[];
@@ -49,12 +50,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-stone-100/80 dark:bg-stone-800/80 text-xs font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-200/80 dark:hover:bg-stone-700/80 transition-all cursor-pointer select-none"
           title="Select AI Model"
         >
-          <img
-            src="https://i.imgur.com/0J9yC8T.jpeg"
-            alt="Groky AI"
-            className="h-4 w-4 rounded-md object-cover"
-            referrerPolicy="no-referrer"
-          />
+          <GrokyLogo className="w-4 h-4 rounded-md" />
           <span className="font-semibold text-stone-800 dark:text-stone-200 text-[11px] sm:text-xs flex items-center gap-1.5">
             {selectedModel.name}
             {selectedModel.isLocked && (
@@ -92,13 +88,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   >
                     <div className="flex items-center gap-2.5 min-w-0 pr-2">
                       <div className="relative shrink-0">
-                        <img
-                          src="https://i.imgur.com/0J9yC8T.jpeg"
-                          alt="Groky AI"
-                          className={`w-6 h-6 rounded-lg object-cover border ${
+                        <GrokyLogo
+                          className={`w-6 h-6 rounded-lg ${
                             isLocked ? "opacity-60 border-amber-500/40" : "border-stone-200/60 dark:border-stone-700/60"
                           }`}
-                          referrerPolicy="no-referrer"
                         />
                         {isLocked && (
                           <div className="absolute -top-1 -right-1 bg-amber-500 text-stone-950 rounded-full w-3.5 h-3.5 flex items-center justify-center text-[8px] font-bold shadow-xs">

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { HeroOrb } from "./HeroOrb";
 import { ParticleBackground } from "./ParticleBackground";
+import { GrokyLogo } from "./GrokyLogo";
 
 interface LandingPageProps {
   onStartChat: () => void;
@@ -207,12 +208,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             className="flex items-center gap-3 cursor-pointer select-none"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
-            <img
-              src="https://i.imgur.com/0J9yC8T.jpeg"
-              alt="Groky AI"
-              className="w-8 h-8 rounded-xl object-cover shadow-xs border border-stone-200/80 dark:border-stone-700/80"
-              referrerPolicy="no-referrer"
-            />
+            <GrokyLogo className="w-8 h-8 rounded-xl shadow-xs" />
             <span className="font-serif-editorial text-lg font-bold tracking-tight text-stone-900 dark:text-stone-100">
               Groky AI
             </span>
@@ -701,12 +697,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <footer className="py-10 max-w-5xl mx-auto px-4 sm:px-6 z-10 relative">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-stone-500">
           <div className="flex items-center gap-2.5">
-            <img
-              src="https://i.imgur.com/0J9yC8T.jpeg"
-              alt="Groky AI"
-              className="w-6 h-6 rounded-lg object-cover"
-              referrerPolicy="no-referrer"
-            />
+            <GrokyLogo className="w-6 h-6 rounded-lg" />
             <span className="font-semibold text-stone-800 dark:text-stone-200">
               Groky AI
             </span>

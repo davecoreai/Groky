@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Conversation, UserAuth } from "../types";
+import { GrokyLogo } from "./GrokyLogo";
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -152,12 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
           title="Buka Landing Page Groky AI"
         >
-          <img
-            src="https://i.imgur.com/0J9yC8T.jpeg"
-            alt="Groky AI"
-            className="h-8 w-8 rounded-xl object-cover shadow-xs border border-stone-200/60 dark:border-stone-700/60"
-            referrerPolicy="no-referrer"
-          />
+          <GrokyLogo className="h-8 w-8 rounded-xl shadow-xs" />
           <div>
             <span className="font-serif-editorial text-base font-semibold tracking-tight text-stone-900 dark:text-stone-100">
               Groky AI

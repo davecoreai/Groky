@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Prism from "prismjs";
 import "prismjs/themes/prism-tomorrow.css"; // Clean dark code styling
-import { CinematicImageFrame } from "./CinematicImageFrame";
 
 interface CodeBlockProps {
   language: string;
@@ -142,33 +141,6 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
   const rafRef = useRef<number | null>(null);
 
   const { cleanLang, displayTitle, iconClass, is3D } = getCodeDetails(language, title, code);
-
-  // Check if this is a cinematic image generation block
-  const isImageGen = ["image", "image-generator", "cinematic-image", "flux-image"].includes(cleanLang);
-
-  if (isImageGen) {
-    let parsedPrompt = code.trim();
-    let aspectRatio: "16:9" | "4:3" | "1:1" | "9:16" = "16:9";
-    let imgTitle = title || "Cinematic Frame — Photorealistic";
-    let initUrl = "";
-
-    try {
-      const json = JSON.parse(code);
-      if (json.prompt) parsedPrompt = json.prompt;
-      if (json.aspectRatio) aspectRatio = json.aspectRatio;
-      if (json.title) imgTitle = json.title;
-      if (json.url || json.imageUrl) initUrl = json.url || json.imageUrl;
-    } catch {}
-
-    return (
-      <CinematicImageFrame
-        prompt={parsedPrompt}
-        title={imgTitle}
-        aspectRatio={aspectRatio}
-        initialImageUrl={initUrl}
-      />
-    );
-  }
 
   // Smooth, non-blocking syntax highlighting
   useEffect(() => {

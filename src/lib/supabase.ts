@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { Conversation, Message, UserSettings, UserAuth } from "../types";
+import { getDeviceId } from "./storage";
 
 let cachedClient: SupabaseClient | null = null;
 let cachedUrl = "";
@@ -69,10 +70,12 @@ export async function fetchConversationsFromSupabase(
   if (!client) return null;
 
   try {
-    // 1. Fetch conversations
+    const devId = getDeviceId();
+    // 1. Fetch conversations filtered by this specific device_id
     const { data: convRows, error: convError } = await client
       .from("conversations")
       .select("*")
+      .eq("device_id", devId)
       .order("updated_at", { ascending: false });
 
     if (convError || !convRows) {
@@ -130,9 +133,11 @@ export async function saveConversationToSupabase(
   if (!client) return false;
 
   try {
-    // Upsert conversation row
+    const devId = getDeviceId();
+    // Upsert conversation row with unique device_id
     const { error: convErr } = await client.from("conversations").upsert({
       id: conv.id,
+      device_id: devId,
       title: conv.title,
       model_id: conv.modelId,
       is_pinned: conv.isPinned,

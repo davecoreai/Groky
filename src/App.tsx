@@ -11,6 +11,7 @@ import {
   clearDeviceMemory,
   getFormattedDeviceMemoryContext,
   applyAppFont,
+  getDeviceId,
 } from "./lib/storage";
 import {
   getSupabaseClient,
@@ -39,7 +40,10 @@ function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
 
   let text = prompt.trim();
   // Remove filler conversational prefixes in Indonesian and English
-  text = text.replace(/^(tolong|buatkan|buat|bikin|tuliskan|jelaskan|apa itu|bagaimana cara|help me|can you|please|write|create|explain|how to|what is|tell me about)\s+/i, "");
+  text = text.replace(
+    /^(halo|hai|hey|tolong|buatkan|buat|bikin|tuliskan|jelaskan|apa itu|bagaimana cara|gimana cara|apakah|bisa|coba|help me|can you|please|write|create|explain|how to|what is|tell me about)\s+/gi,
+    ""
+  );
   // Replace newlines and excessive spaces
   text = text.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ");
   // Strip trailing punctuation
@@ -54,11 +58,10 @@ function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
     text = text.charAt(0).toUpperCase() + text.slice(1);
   }
 
-  // Take up to 36 characters cleanly
-  if (text.length > 36) {
-    const truncated = text.slice(0, 36);
-    const lastSpace = truncated.lastIndexOf(" ");
-    return lastSpace > 18 ? `${truncated.slice(0, lastSpace)}...` : `${truncated}...`;
+  // Take 2 to 5 words for a clean topic phrase
+  const words = text.split(" ");
+  if (words.length > 4) {
+    return words.slice(0, 4).join(" ");
   }
 
   return text || "Groky Chat";
@@ -98,7 +101,8 @@ export default function App() {
   const [userAuth, setUserAuth] = useState<UserAuth | null>(() => {
     try {
       if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("groky_user_auth");
+        const devId = getDeviceId();
+        const saved = localStorage.getItem(`groky_user_auth_${devId}`) || localStorage.getItem("groky_user_auth");
         if (saved) return JSON.parse(saved);
       }
     } catch {}
@@ -119,8 +123,9 @@ export default function App() {
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
-        localStorage.setItem("groky_has_visited", "true");
-        localStorage.setItem("groky_last_view_mode", viewMode);
+        const devId = getDeviceId();
+        localStorage.setItem(`groky_has_visited_${devId}`, "true");
+        localStorage.setItem(`groky_last_view_mode_${devId}`, viewMode);
       }
     } catch {}
   }, [viewMode]);
@@ -142,8 +147,7 @@ export default function App() {
   const [deviceMemories, setDeviceMemories] = useState<MemoryItem[]>(() => loadDeviceMemory());
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const typewriterTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const textBufferQueueRef = useRef<string[]>([]);
+  const rafRenderIdRef = useRef<number | null>(null);
   const currentAccumulatedTextRef = useRef<string>("");
 
   // Fetch Supabase configuration from backend and sync it to settings
@@ -203,7 +207,8 @@ export default function App() {
         };
         setUserAuth(authObj);
         try {
-          localStorage.setItem("groky_user_auth", JSON.stringify(authObj));
+          const devId = getDeviceId();
+          localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(authObj));
         } catch {}
         setViewMode("chat");
       }
@@ -224,12 +229,15 @@ export default function App() {
         };
         setUserAuth(authObj);
         try {
-          localStorage.setItem("groky_user_auth", JSON.stringify(authObj));
+          const devId = getDeviceId();
+          localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(authObj));
         } catch {}
         setViewMode("chat");
       } else if (event === "SIGNED_OUT") {
         setUserAuth(null);
         try {
+          const devId = getDeviceId();
+          localStorage.removeItem(`groky_user_auth_${devId}`);
           localStorage.removeItem("groky_user_auth");
         } catch {}
         setViewMode("chat");
@@ -240,6 +248,20 @@ export default function App() {
       authListener.subscription.unsubscribe();
     };
   }, [settings]);
+
+  // Dynamic document title update based on conversation topic
+  // Before chat begins / empty: "Groky AI"
+  // After chat begins: "{Topik Chat} - Groky AI"
+  useEffect(() => {
+    const activeConv = conversations.find((c) => c.id === activeId);
+    const hasUserMessage = activeConv && activeConv.messages.some((m) => m.role === "user");
+
+    if (hasUserMessage && activeConv?.title && activeConv.title !== "Obrolan Baru") {
+      document.title = `${activeConv.title} - Groky AI`;
+    } else {
+      document.title = "Groky AI";
+    }
+  }, [activeId, conversations]);
 
   // Responsive mobile detector & visual viewport sync for mobile keyboard
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
@@ -309,17 +331,22 @@ export default function App() {
     handleSaveSettings({ ...settings, theme: nextTheme });
   };
 
-  // New Chat (Previous streaming keeps running in the background)
+  // New Chat (Preserves the user's currently selected model from active conversation or settings)
   const handleNewChat = () => {
     const newId = `conv-${Date.now()}`;
-    const freeDefaultModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "thinkingmachines/inkling:free";
+    const preservedModel =
+      activeConversation?.modelId ||
+      settings.preferredModel ||
+      DEFAULT_MODELS.find((m) => !m.isLocked)?.id ||
+      "thinkingmachines/inkling:free";
+
     const newConv: Conversation = {
       id: newId,
       title: "New Chat",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       isPinned: false,
-      modelId: freeDefaultModel,
+      modelId: preservedModel,
       messages: [],
     };
     setConversations((prev) => [newConv, ...prev]);
@@ -384,65 +411,38 @@ export default function App() {
     handleSaveSettings({ ...settings, preferredModel: modelId });
   };
 
-  // Stop Streaming
-  const handleStopStreaming = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    if (typewriterTimerRef.current) {
-      clearInterval(typewriterTimerRef.current);
-      typewriterTimerRef.current = null;
-    }
-    // Flush remaining buffer immediately
-    if (textBufferQueueRef.current.length > 0) {
-      currentAccumulatedTextRef.current += textBufferQueueRef.current.join("");
-      textBufferQueueRef.current = [];
-    }
-    setIsStreaming(false);
-  };
-
-  // Ultra-Fast Low-Latency Fluid Streaming Engine
-  const startTypewriterLoop = (targetConvId: string, assistantMessageId: string) => {
-    if (typewriterTimerRef.current) {
-      clearInterval(typewriterTimerRef.current);
-    }
-
-    // High frequency 8ms tick with dynamic adaptive burst draining
-    typewriterTimerRef.current = setInterval(() => {
-      const queue = textBufferQueueRef.current;
-      if (queue.length === 0) return;
-
-      let chunkSize: number;
-      if (queue.length > 50) {
-        // Large backlog burst: flush up to 40 characters so the screen never lags behind incoming stream
-        chunkSize = Math.min(queue.length, 40);
-      } else if (queue.length > 20) {
-        chunkSize = 16;
-      } else if (queue.length > 8) {
-        chunkSize = 8;
-      } else {
-        chunkSize = 3;
-      }
-
-      const charsToAppend = queue.splice(0, chunkSize).join("");
-      currentAccumulatedTextRef.current += charsToAppend;
-
-      const fullText = currentAccumulatedTextRef.current;
-
+  // Instant Real-Time RAF Streaming Renderer
+  const scheduleFastRender = (targetConvId: string, assistantMessageId: string) => {
+    if (rafRenderIdRef.current) return;
+    rafRenderIdRef.current = requestAnimationFrame(() => {
+      rafRenderIdRef.current = null;
+      const text = currentAccumulatedTextRef.current;
       setConversations((prev) =>
         prev.map((c) =>
           c.id === targetConvId
             ? {
                 ...c,
                 messages: c.messages.map((m) =>
-                  m.id === assistantMessageId ? { ...m, content: fullText } : m
+                  m.id === assistantMessageId ? { ...m, content: text } : m
                 ),
               }
             : c
         )
       );
-    }, 8);
+    });
+  };
+
+  // Stop Streaming
+  const handleStopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (rafRenderIdRef.current) {
+      cancelAnimationFrame(rafRenderIdRef.current);
+      rafRenderIdRef.current = null;
+    }
+    setIsStreaming(false);
   };
 
   // Send Message with OpenRouter & Supabase Integration & Multi-Agent Orchestration
@@ -526,8 +526,6 @@ export default function App() {
 
     setIsStreaming(true);
     currentAccumulatedTextRef.current = "";
-    textBufferQueueRef.current = [];
-    startTypewriterLoop(targetConvId, assistantMessageId);
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -588,20 +586,25 @@ export default function App() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let sseBuffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
+        sseBuffer += decoder.decode(value, { stream: true });
+        const lines = sseBuffer.split("\n");
+        // Retain any incomplete partial line in the buffer
+        sseBuffer = lines.pop() || "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const dataStr = line.replace("data: ", "").trim();
-            if (dataStr === "[DONE]") {
-              break;
-            }
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(":")) continue;
+          if (trimmed === "data: [DONE]") {
+            break;
+          }
+          if (trimmed.startsWith("data: ")) {
+            const dataStr = trimmed.slice(6).trim();
             try {
               const data = JSON.parse(dataStr);
               if (data.error) {
@@ -616,25 +619,32 @@ export default function App() {
                 );
               }
               if (data.text) {
-                // Push characters into smooth typewriter queue
-                const chars = Array.from(data.text as string);
-                textBufferQueueRef.current.push(...chars);
+                // Direct real-time RAF stream rendering: zero artificial delay
+                currentAccumulatedTextRef.current += data.text;
+                scheduleFastRender(targetConvId, assistantMessageId);
               }
             } catch (err) {
-              // chunk boundary
+              // Ignore invalid JSON chunk
             }
           }
         }
       }
 
-      // Immediately flush any remaining queue buffer with zero delay
-      if (typewriterTimerRef.current) {
-        clearInterval(typewriterTimerRef.current);
-        typewriterTimerRef.current = null;
+      // Flush any trailing line in sseBuffer
+      if (sseBuffer.trim().startsWith("data: ")) {
+        try {
+          const data = JSON.parse(sseBuffer.trim().slice(6).trim());
+          if (data.text) {
+            currentAccumulatedTextRef.current += data.text;
+            scheduleFastRender(targetConvId, assistantMessageId);
+          }
+        } catch {}
       }
-      if (textBufferQueueRef.current.length > 0) {
-        currentAccumulatedTextRef.current += textBufferQueueRef.current.join("");
-        textBufferQueueRef.current = [];
+
+      // Cancel any pending RAF and finalize immediately
+      if (rafRenderIdRef.current) {
+        cancelAnimationFrame(rafRenderIdRef.current);
+        rafRenderIdRef.current = null;
       }
 
       let finalContent = currentAccumulatedTextRef.current;
@@ -673,6 +683,31 @@ export default function App() {
             };
             if (hasText) {
               saveConversationToSupabase(updatedConv, settings).catch(() => {});
+
+              // Auto-refine title using AI topic summarizer if this was the first exchange
+              if (c.messages.filter((m) => m.role === "user").length <= 1) {
+                fetch("/api/chat/generate-title", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ prompt: userPrompt, response: finalContent }),
+                })
+                  .then((res) => (res.ok ? res.json() : null))
+                  .then((data) => {
+                    if (data?.title) {
+                      setConversations((latest) =>
+                        latest.map((conv) => {
+                          if (conv.id === targetConvId) {
+                            const refined = { ...conv, title: data.title };
+                            saveConversationToSupabase(refined, settings).catch(() => {});
+                            return refined;
+                          }
+                          return conv;
+                        })
+                      );
+                    }
+                  })
+                  .catch(() => {});
+              }
             }
             return updatedConv;
           }
@@ -684,9 +719,9 @@ export default function App() {
       // REQUIREMENT 7: DO NOT auto enter preview mode!
       // (Preview is strictly manual when user clicks "Preview" button on HTML code)
     } catch (err: any) {
-      if (typewriterTimerRef.current) {
-        clearInterval(typewriterTimerRef.current);
-        typewriterTimerRef.current = null;
+      if (rafRenderIdRef.current) {
+        cancelAnimationFrame(rafRenderIdRef.current);
+        rafRenderIdRef.current = null;
       }
 
       if (err.name === "AbortError") {
@@ -840,6 +875,8 @@ export default function App() {
         onLogout={() => {
           setUserAuth(null);
           try {
+            const devId = getDeviceId();
+            localStorage.removeItem(`groky_user_auth_${devId}`);
             localStorage.removeItem("groky_user_auth");
           } catch {}
         }}

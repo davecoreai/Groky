@@ -509,3 +509,4 @@ export function getFormattedDeviceMemoryContext(): string {
   if (items.length === 0) return "";
   return items.map((m) => `- ${m.key}: ${m.value}`).join("\n");
 }
+

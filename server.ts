@@ -34,7 +34,7 @@ const DEFAULT_APP_URL = process.env.APP_URL || APP_URLS.join(", ");
 
 // Initialize Express
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) === 8080 ? 3000 : (Number(process.env.PORT) || 3000);
 
 // Enable CORS for Vercel Serverless, Custom Domains & local previews
 app.use((_req, res, next) => {
@@ -1297,6 +1297,13 @@ async function streamFromGroq({
   let lastErr: any = null;
   for (const candidate of groqCandidates) {
     try {
+      const timeoutController = new AbortController();
+      const timeoutId = setTimeout(() => timeoutController.abort(), 4000);
+
+      const combinedSignal = signal
+        ? (AbortSignal.any ? AbortSignal.any([signal, timeoutController.signal]) : signal)
+        : timeoutController.signal;
+
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -1308,9 +1315,12 @@ async function streamFromGroq({
           messages,
           stream: true,
           temperature: Math.min(Math.max(Number(temperature) || 0.7, 0), 1.5),
+          max_tokens: 8192,
         }),
-        signal,
+        signal: combinedSignal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -1415,6 +1425,13 @@ async function streamFromOpenRouter({
 
   for (const slug of Array.from(new Set(openRouterSlugs))) {
     try {
+      const timeoutController = new AbortController();
+      const timeoutId = setTimeout(() => timeoutController.abort(), 3500);
+
+      const combinedSignal = signal
+        ? (AbortSignal.any ? AbortSignal.any([signal, timeoutController.signal]) : signal)
+        : timeoutController.signal;
+
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -1429,9 +1446,12 @@ async function streamFromOpenRouter({
           messages,
           stream: true,
           temperature: Math.min(Math.max(Number(temperature) || 0.7, 0), 1.5),
+          max_tokens: 8192,
         }),
-        signal,
+        signal: combinedSignal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
@@ -1530,20 +1550,23 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
     targetAgent = "auto",
   } = req.body;
 
-  // Set SSE Headers
+  // Ultra-low latency socket and SSE configuration
+  req.socket?.setNoDelay?.(true);
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.setHeader("Content-Encoding", "none");
+  res.setHeader("Transfer-Encoding", "chunked");
   res.flushHeaders?.();
 
-  // Helper to send SSE data with Sentinel Zero-Leak scrubbing
+  // Helper to send SSE data with Sentinel Zero-Leak scrubbing and immediate buffer flush
   const sendEvent = (data: any) => {
     if (data && data.text && typeof data.text === "string") {
       data.text = data.text.replace(/(AIzaSy[A-Za-z0-9_-]{33}|sk-[A-Za-z0-9_-]{20,}|gsk_[A-Za-z0-9_-]{20,})/g, "[REDACTED_BY_SENTINEL]");
     }
     res.write(`data: ${JSON.stringify(data)}\n\n`);
+    (res as any).flush?.();
   };
 
   // Helper to send error and terminate
@@ -1571,9 +1594,29 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
     }
 
     // 2. Groky Orchestrator: Route to optimal specialized agent
-    let detectedIntent: "code_engineering" | "deep_research" | "data_analysis" | "general_orchestration" =
+    let detectedIntent: "image_synthesis" | "code_engineering" | "deep_research" | "data_analysis" | "general_orchestration" =
       "general_orchestration";
     let chosenAgentId = "groky-orchestrator";
+
+    const isImageGenerationRequest =
+      (lowerPrompt.includes("gambar") ||
+        lowerPrompt.includes("foto") ||
+        lowerPrompt.includes("photo") ||
+        lowerPrompt.includes("image") ||
+        lowerPrompt.includes("lukisan") ||
+        lowerPrompt.includes("wallpaper") ||
+        lowerPrompt.includes("visual") ||
+        lowerPrompt.includes("draw") ||
+        lowerPrompt.includes("potret") ||
+        lowerPrompt.includes("portrait") ||
+        lowerPrompt.includes("sketsa") ||
+        lowerPrompt.includes("render visual") ||
+        lowerPrompt.includes("generate image")) &&
+      !lowerPrompt.includes("kode") &&
+      !lowerPrompt.includes("code") &&
+      !lowerPrompt.includes("canvas") &&
+      !lowerPrompt.includes("svg") &&
+      !lowerPrompt.includes("html");
 
     if (targetAgent && targetAgent !== "auto" && targetAgent !== "groky-orchestrator") {
       chosenAgentId = targetAgent;
@@ -1595,7 +1638,9 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
         lowerPrompt.includes("function") ||
         lowerPrompt.includes("refactor") ||
         lowerPrompt.includes("bug") ||
-        lowerPrompt.includes("script")
+        lowerPrompt.includes("script") ||
+        lowerPrompt.includes("github") ||
+        lowerPrompt.includes("repo")
       ) {
         detectedIntent = "code_engineering";
         chosenAgentId = "opencode-agent";
@@ -1648,9 +1693,9 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
     let isSearchGroundingRequested = false;
 
     if (detectedIntent === "code_engineering") {
-      agentDirective = `\n\n[OpenCode Agent Protocol Activated]:
+      agentDirective += `\n\n[OpenCode Agent Protocol Activated]:
 - Specialize in high-craft, production-grade software engineering.
-- If writing code or web interfaces, produce 100% complete, runnable implementations without placeholders or TODOs.
+- MANDATORY COMPLETENESS RULE: Never truncate, cut off, or abbreviate code. Provide 100% complete, fully implemented, runnable code without placeholders, ellipsis, or missing functions. Always complete all open braces and tags.
 - Strictly DO NOT include emojis in code, UI elements, button labels, or headers.
 - For 3D Object requests: construct hyper-realistic WebGL / Three.js scenes with PBR materials (MeshPhysicalMaterial with clearcoat/roughness/metalness), studio 3-point lighting + soft PCF shadows, ACESFilmicToneMapping, smooth OrbitControls, and multi-part intricate geometry. Output as 100% self-contained HTML/JS.`;
     } else if (detectedIntent === "deep_research") {
@@ -1664,11 +1709,11 @@ apiRouter.post("/chat/stream", checkRateLimit, async (req: Request, res: Respons
       if (explicitLiveSearch) {
         isSearchGroundingRequested = true;
       }
-      agentDirective = `\n\n[Hermes Agent Protocol Activated]:
+      agentDirective += `\n\n[Hermes Agent Protocol Activated]:
 - Conduct rigorous, multi-hop deep reasoning and research.
 - Deconstruct problems from first principles, examine assumptions, explore alternative explanations, and synthesize clear evidence-based insights.`;
     } else if (detectedIntent === "data_analysis") {
-      agentDirective = `\n\n[DataWeaver Agent Protocol Activated]:
+      agentDirective += `\n\n[DataWeaver Agent Protocol Activated]:
 - Provide mathematically rigorous, structured analysis and data-driven insights.
 - Format numerical information cleanly in structured markdown tables or bulleted breakdowns.`;
     }
@@ -1744,11 +1789,7 @@ Do not optimize for the number of elements. Optimize for quality, hierarchy, coh
 
 ADDITIONAL SYSTEM CAPABILITIES:
 - Device Memory & Learning: You have access to persistent device memory context. If the user asks you to remember a fact or preference, append \`[MEMORY_SAVE: Key | Value]\` at the end of your response so it is saved to the user's device memory.
-- Photorealistic Image Generation: If the user requests to create, generate, or draw an image (e.g. "buat gambar...", "generate image...", "draw...", "bikin foto..."), describe the scene with natural daylight and lifelike composition (avoid excessive unnatural contrast), and output an image codeblock in this exact format:
-\`\`\`image
-{"prompt": "Detailed photorealistic description in natural balanced daylight with realistic 35mm depth of field", "aspectRatio": "16:9", "title": "Deskripsi Gambar"}
-\`\`\`
-This will render in the user's interface with an interactive frame.`;
+- Text, Code & Artifact Focus: You communicate with crystal-clear writing, Markdown formatting, code snippets, Mermaid diagrams, SVG markup, or interactive HTML5/WebGL artifacts when requested. You do not generate raster image frames or image canvas blocks.`;
 
     const fullSystemInstruction = systemPrompt
       ? `${defaultSystemPrompt}\n\nCustom User Directive:\n${systemPrompt}${agentDirective}`
@@ -1812,6 +1853,7 @@ This will render in the user's interface with an interactive frame.`;
     const geminiConfig: any = {
       systemInstruction: fullSystemInstruction,
       temperature: Math.min(Math.max(Number(temperature) || 0.7, 0), 1),
+      maxOutputTokens: 8192,
     };
     if (isSearchGroundingRequested) {
       geminiConfig.tools = [{ googleSearch: {} }];
@@ -1935,6 +1977,79 @@ This will render in the user's interface with an interactive frame.`;
   }
 });
 
+// Fast AI Conversation Topic Title Generator (Summarizes chat into a 2-4 word topic)
+apiRouter.post("/chat/generate-title", async (req: Request, res: Response) => {
+  try {
+    const { prompt = "", response = "" } = req.body;
+    if (!prompt.trim()) {
+      return res.json({ title: "Obrolan Baru" });
+    }
+
+    const groqKey = process.env.GROQ_API_KEY;
+    if (groqKey) {
+      try {
+        const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${groqKey}`,
+          },
+          body: JSON.stringify({
+            model: "qwen/qwen3.8-27b",
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Anda adalah pembuat judul topik obrolan AI. Buat judul topik yang sangat singkat, padat, dan representatif (2 sampai 4 kata dalam Bahasa Indonesia) yang menggambarkan esensi inti dari topik yang dibahas pengguna. DILARANG mengulang kalimat atau pesan mentah dari pengguna. DILARANG memakai tanda petik, tanda kurung, atau titik di akhir. Contoh: 'Arsitektur React Modern', 'Integrasi GitHub OAuth', 'Riset Kecerdasan Buatan', 'Optimasi Database SQL'.",
+              },
+              {
+                role: "user",
+                content: `Pesan pengguna: "${prompt.slice(0, 300)}"\nKonteks respon: "${(response || "").slice(0, 200)}"`,
+              },
+            ],
+            max_tokens: 20,
+            temperature: 0.2,
+          }),
+          signal: AbortSignal.timeout(3000),
+        });
+
+        if (groqRes.ok) {
+          const data = (await groqRes.json()) as any;
+          let title = data.choices?.[0]?.message?.content?.trim();
+          if (title) {
+            title = title
+              .replace(/^["'“”‘«]+|["'“”’»]+$/g, "")
+              .replace(/^[#*-]+\s*/, "")
+              .replace(/^(Judul:|Topic:|Topik:)\s*/i, "")
+              .trim();
+            if (title.length >= 3 && title.length <= 40) {
+              return res.json({ title });
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Heuristic topic extractor if API key unavailable or network error
+    let clean = prompt
+      .replace(/^(tolong|buatkan|buat|bikin|tuliskan|jelaskan|bagaimana cara|apa itu|cara|help me|can you|please|write|create|explain|how to|what is)\s+/gi, "")
+      .replace(/[\r\n\t]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    // Remove punctuation
+    clean = clean.replace(/[?.!,:;]+$/, "").trim();
+    if (!clean) clean = "Groky Chat";
+
+    // Split words and take 2-4 core topic words
+    const words = clean.split(" ").slice(0, 4).join(" ");
+    const capitalized = words.charAt(0).toUpperCase() + words.slice(1);
+    res.json({ title: capitalized || "Groky Chat" });
+  } catch (err: any) {
+    res.json({ title: "Groky Chat" });
+  }
+});
+
 // Document & File Parsing Analyzer endpoint
 apiRouter.post("/documents/analyze", async (req: Request, res: Response) => {
   try {
@@ -1989,47 +2104,6 @@ apiRouter.post("/embeddings", async (req: Request, res: Response) => {
   }
 });
 
-// Photorealistic Image Generation Endpoint with Natural Balanced Contrast
-apiRouter.post("/images/generate", async (req: Request, res: Response) => {
-  try {
-    const { prompt, aspectRatio = "16:9", seed = Math.floor(Math.random() * 1000000) } = req.body;
-    if (!prompt) {
-      return res.status(400).json({ error: "Prompt is required for image generation" });
-    }
-
-    // Directives for realistic natural lighting and balanced dynamic range
-    const realisticPrompt = `${prompt.trim()}, photorealistic documentary photography, natural diffused daylight, balanced exposure, soft natural shadows, 35mm lens, authentic textures, true-to-life colors, clean composition`;
-
-    let width = 1280;
-    let height = 720;
-    if (aspectRatio === "4:3") {
-      width = 1024;
-      height = 768;
-    } else if (aspectRatio === "1:1") {
-      width = 1024;
-      height = 1024;
-    } else if (aspectRatio === "9:16") {
-      width = 720;
-      height = 1280;
-    }
-
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(realisticPrompt)}?width=${width}&height=${height}&seed=${seed}&model=flux-realism&nologo=true&enhance=false`;
-
-    res.json({
-      success: true,
-      imageUrl,
-      prompt,
-      enhancedPrompt: realisticPrompt,
-      aspectRatio,
-      seed,
-      modelUsed: "thinkingmachines/inkling:free",
-    });
-  } catch (err: any) {
-    console.error("Image generation error:", err);
-    res.status(500).json({ error: err?.message || "Failed to generate image" });
-  }
-});
-
 // Mount API Router for both /api/* and root Serverless invocation
 app.use("/api", apiRouter);
 app.use("/", apiRouter);
@@ -2039,8 +2113,7 @@ app.use("/", apiRouter);
 // ==========================================
 async function startServer() {
   const distPath = path.join(process.cwd(), "dist");
-  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
-  const isProduction = process.env.NODE_ENV === "production" || hasDist;
+  const isProduction = process.env.NODE_ENV === "production";
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
@@ -2049,6 +2122,18 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+    app.use("*", async (req: Request, res: Response, next) => {
+      const url = req.originalUrl;
+      try {
+        const indexPath = path.resolve(process.cwd(), "index.html");
+        let template = fs.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e: any) {
+        if (vite) vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     app.use(express.static(distPath));
     app.get("*", (_req: Request, res: Response) => {
@@ -2056,8 +2141,12 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Groky AI server running on http://0.0.0.0:${PORT}`);
+  });
+
+  server.on("error", (err: any) => {
+    console.error("Server listen error:", err);
   });
 }
 
