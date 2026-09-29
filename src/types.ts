@@ -176,10 +176,13 @@ export interface ModelOption {
   description: string;
   maxTokens: number;
   isLocked?: boolean;
+  lockReason?: string;
   isCustom?: boolean;
   supportsVision?: boolean;
   supportsCodeArtifacts?: boolean;
 }
+
+export type SubscriptionTier = "free" | "lite" | "plus" | "pro";
 
 export interface UserSettings {
   preferredModel: string;
@@ -199,6 +202,8 @@ export interface UserSettings {
   toneStyle?: "Default" | "Ramah" | "Profesional";
   customInstructions?: string;
   selectedFont?: string;
+  thinkingMode?: boolean;
+  subscriptionTier?: SubscriptionTier;
 }
 
 export interface RateLimitStatus {
@@ -213,4 +218,5 @@ export interface UserAuth {
   email?: string;
   avatarUrl?: string;
   provider?: "google" | "email";
+  subscriptionTier?: SubscriptionTier;
 }

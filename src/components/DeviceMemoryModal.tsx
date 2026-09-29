@@ -45,10 +45,10 @@ export const DeviceMemoryModal: React.FC<DeviceMemoryModalProps> = ({
             </div>
             <div>
               <h3 className="font-serif-editorial text-lg font-semibold tracking-tight">
-                Memori Perangkat AI
+                Memori Akun AI
               </h3>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                Informasi & preferensi tersimpan khusus di perangkat ini
+                Informasi & preferensi tersimpan aman di akun Anda (tidak akan ter-reset)
               </p>
             </div>
           </div>
@@ -87,7 +87,7 @@ export const DeviceMemoryModal: React.FC<DeviceMemoryModalProps> = ({
             disabled={!key.trim() || !value.trim()}
             className="w-full py-1.5 px-3 rounded-lg bg-stone-900 dark:bg-amber-600 text-white text-xs font-medium hover:bg-stone-800 dark:hover:bg-amber-500 disabled:opacity-40 transition-all cursor-pointer"
           >
-            Simpan ke Memori Device
+            Simpan ke Memori Akun
           </button>
         </form>
 
@@ -110,7 +110,7 @@ export const DeviceMemoryModal: React.FC<DeviceMemoryModalProps> = ({
           <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
             {memories.length === 0 ? (
               <div className="p-6 text-center text-xs text-stone-400 border border-dashed border-stone-200 dark:border-stone-800 rounded-xl">
-                Belum ada memori tersimpan di perangkat ini. Anda dapat menambahkannya manual di atas atau meminta AI mengingat sesuatu saat berdiskusi.
+                Belum ada memori tersimpan untuk akun Anda. Anda dapat menambahkannya manual di atas atau meminta AI mengingat sesuatu saat berdiskusi.
               </div>
             ) : (
               memories.map((m) => (
@@ -141,7 +141,7 @@ export const DeviceMemoryModal: React.FC<DeviceMemoryModalProps> = ({
 
         {/* Footer info */}
         <div className="pt-2 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
-          <span>Tersimpan secara lokal di peramban perangkat ini</span>
+          <span>Tersimpan aman & tersinkronisasi di akun Anda</span>
           <button
             onClick={onClose}
             className="px-3 py-1 rounded-lg bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-medium hover:bg-stone-300 dark:hover:bg-stone-700 transition-all cursor-pointer"

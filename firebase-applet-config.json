@@ -1,0 +1,12 @@
+{
+  "projectId": "grokyai",
+  "appId": "1:722933357358:web:8f2a954be85094836bb8bf",
+  "apiKey": "AIzaSyBci5cTHLqif-g4shWk3yh47IwSZ_Ng5y4",
+  "authDomain": "auth.grokyai.web.id",
+  "firestoreDatabaseId": "ai-studio-vesperaai-3e92e7ca-b9af-402d-a326-f12d5650ce3e",
+  "storageBucket": "grokyai.firebasestorage.app",
+  "messagingSenderId": "722933357358",
+  "measurementId": "",
+  "oAuthClientId": "722933357358-e0rpafhuo4fk9ep0ii659po83fiqmp3g.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
+}

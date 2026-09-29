@@ -246,7 +246,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Footer: User Profile & Settings */}
-      <div className="p-3 border-t border-stone-200/60 dark:border-stone-800/60 space-y-1">
+      <div className="p-3 border-t border-stone-200/60 dark:border-stone-800/60 space-y-1.5">
         {userAuth?.isLoggedIn && (
           <div className="flex items-center justify-between p-2 rounded-xl bg-stone-100/80 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-800/80">
             <div className="flex items-center gap-2 min-w-0">

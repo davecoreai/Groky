@@ -140,18 +140,36 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </h3>
               <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
                 {lockedModalModel.badge === "Perbaikan"
-                  ? "Model ini sementara dinonaktifkan karena sedang dalam tahap pemeliharaan sistem. Silakan pilih Groky 3.6 Flash atau Groky 3.1 Lite."
-                  : `Model ini merupakan fitur eksklusif untuk ${lockedModalModel.badge}. Silakan upgrade paket Anda untuk membuka akses penuh.`}
+                  ? "Model ini sementara dinonaktifkan karena sedang dalam tahap pemeliharaan sistem. Silakan pilih Groky 3.1 Lite."
+                  : lockedModalModel.id === "gemini-3.5-flash"
+                  ? "Model Groky 3.6 Flash terbuka di Paket Pro dengan kapasitas konteks 1.000.000+ Token dan kapabilitas multimodal mutakhir."
+                  : lockedModalModel.id === "openai/gpt-oss-120b"
+                  ? "Model Groky 3.5 Pro terbuka di Paket Plus dan Pro untuk pemrograman kompleks, arsitektur software, dan reasoning mendalam."
+                  : `Model ini memerlukan upgrade paket langganan.`}
               </p>
             </div>
             <div className="pt-2 flex flex-col gap-2">
+              {lockedModalModel.badge !== "Perbaikan" && onOpenPricing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLockedModalModel(null);
+                    setIsOpen(false);
+                    onOpenPricing();
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <i className="fa-solid fa-crown text-xs"></i>
+                  <span>Langganan</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   setLockedModalModel(null);
                   setIsOpen(false);
                 }}
-                className="w-full py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-semibold text-xs shadow-md transition-all cursor-pointer"
+                className="w-full py-2.5 px-4 rounded-xl bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 font-semibold text-xs transition-all cursor-pointer"
               >
                 Tutup &amp; Gunakan Model Lain
               </button>

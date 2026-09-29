@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "User profile document containing authentication metadata",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "createdAt": {
+          "type": "number"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "conversation": {
+      "title": "Conversation",
+      "description": "Chat conversations saved by the user",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "modelId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "isPinned": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "number"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["id", "userId", "title", "createdAt", "updatedAt"]
+    },
+    "memoryItem": {
+      "title": "MemoryItem",
+      "description": "AI memory item saved per user account",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "key": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      },
+      "required": ["id", "key", "value", "updatedAt"]
+    },
+    "userSettings": {
+      "title": "UserSettings",
+      "description": "User preference settings stored per account",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "preferredModel": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "theme": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "toneStyle": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "customInstructions": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "selectedFont": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "thinkingMode": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profile document with strict ownership access"
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": "conversation",
+      "description": "User conversations and chat history"
+    },
+    "/users/{userId}/memories/{memoryId}": {
+      "schema": "memoryItem",
+      "description": "User AI memory items persistent across sessions and devices"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "userSettings",
+      "description": "User settings and custom instructions persistent across sessions and devices"
+    }
+  }
+}

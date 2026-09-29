@@ -11,7 +11,7 @@ export default function handler(req: any, res: any) {
     status: "ok",
     app: "Groky AI",
     version: "2.4.0",
-    url: "https://groky-seven.vercel.app",
+    url: process.env.APP_URL || "https://grokyai.web.id",
     openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
     timestamp: new Date().toISOString()

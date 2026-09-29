@@ -6,12 +6,19 @@ import {
   saveSettings,
   DEFAULT_MODELS,
   loadDeviceMemory,
+  saveDeviceMemory,
   addMemoryItem,
   removeMemoryItem,
   clearDeviceMemory,
   getFormattedDeviceMemoryContext,
   applyAppFont,
   getDeviceId,
+  getSubscriptionPlan,
+  saveSubscriptionPlan,
+  getModelsForSubscription,
+  getDailyMessageQuota,
+  getDailyMessageCount,
+  incrementDailyMessageCount,
 } from "./lib/storage";
 import {
   getSupabaseClient,
@@ -20,7 +27,21 @@ import {
   deleteConversationFromSupabase,
   logDeviceVisitorToSupabase,
 } from "./lib/supabase";
-import { Conversation, Message, AttachedFile, UserSettings, Artifact, MemoryItem, UserAuth } from "./types";
+import {
+  testFirestoreConnection,
+  signInWithGoogle,
+  signOutFirebase,
+  onFirebaseAuthChange,
+  saveConversationToFirestore,
+  fetchConversationsFromFirestore,
+  deleteConversationFromFirestore,
+  saveMemoryToFirestore,
+  fetchMemoriesFromFirestore,
+  deleteMemoryFromFirestore,
+  clearMemoriesInFirestore,
+  auth as firebaseAuth,
+} from "./lib/firebase";
+import { Conversation, Message, AttachedFile, UserSettings, Artifact, MemoryItem, UserAuth, SubscriptionTier } from "./types";
 import { Sidebar } from "./components/Sidebar";
 import { ChatArea } from "./components/ChatArea";
 import { ArtifactViewer } from "./components/ArtifactViewer";
@@ -29,6 +50,7 @@ import { SchemaDocsModal } from "./components/SchemaDocsModal";
 import { DocumentPreviewModal } from "./components/DocumentPreviewModal";
 import { DeviceMemoryModal } from "./components/DeviceMemoryModal";
 import { Settings } from "./components/Settings";
+import { LoginModal } from "./components/LoginModal";
 
 // Helper to extract clean conversation topic title from user prompt
 function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
@@ -68,36 +90,6 @@ function extractTopicTitle(prompt: string, files?: AttachedFile[]): string {
 }
 
 export default function App() {
-  const FREE_DEFAULT_MODEL = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "gemini-3.5-flash";
-
-  // Requirement: Saat baru masuk / refresh halaman, default model selector ke model gratis
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const saved = loadConversations();
-    const freshId = `conv-${Date.now()}`;
-    const freshChat: Conversation = {
-      id: freshId,
-      title: "New Chat",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      isPinned: false,
-      modelId: FREE_DEFAULT_MODEL,
-      messages: [],
-    };
-    // Ensure any loaded empty or locked conversations fall back to free model if locked
-    const sanitizedSaved = saved.map((c) => {
-      const modelObj = DEFAULT_MODELS.find((m) => m.id === c.modelId);
-      if (!c.modelId || modelObj?.isLocked) {
-        return { ...c, modelId: FREE_DEFAULT_MODEL };
-      }
-      return c;
-    });
-    return [freshChat, ...sanitizedSaved.filter((c) => c.messages.length > 0)];
-  });
-
-  const [activeId, setActiveId] = useState<string>(() => {
-    return conversations[0]?.id || `conv-${Date.now()}`;
-  });
-
   const [userAuth, setUserAuth] = useState<UserAuth | null>(() => {
     try {
       if (typeof window !== "undefined") {
@@ -108,6 +100,126 @@ export default function App() {
     } catch {}
     return null;
   });
+
+  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier>(() => {
+    return userAuth?.subscriptionTier || getSubscriptionPlan(userAuth?.email);
+  });
+
+  // Sync subscriptionTier dynamically when active user account changes
+  useEffect(() => {
+    const tier = userAuth?.subscriptionTier || getSubscriptionPlan(userAuth?.email);
+    setSubscriptionTier(tier);
+  }, [userAuth?.email, userAuth?.subscriptionTier]);
+
+  const [settingsSubpage, setSettingsSubpage] = useState<any>(null);
+
+  // Dynamic models based on subscription tier
+  const activeModels = useMemo(() => {
+    return getModelsForSubscription(subscriptionTier);
+  }, [subscriptionTier]);
+
+  const FREE_DEFAULT_MODEL = activeModels.find((m) => !m.isLocked)?.id || "openai/gpt-oss-safeguard-20b";
+
+  const handleUpdateSubscription = (newTier: SubscriptionTier) => {
+    setSubscriptionTier(newTier);
+    saveSubscriptionPlan(newTier, userAuth?.email);
+    if (userAuth) {
+      const updatedUser: UserAuth = { ...userAuth, subscriptionTier: newTier };
+      setUserAuth(updatedUser);
+      try {
+        const devId = getDeviceId();
+        localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(updatedUser));
+        localStorage.setItem("groky_user_auth", JSON.stringify(updatedUser));
+      } catch {}
+    }
+  };
+
+  // Requirement: History chat di setiap akun berbeda-beda (Isolated per Account / Email)
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const savedUserAuth = (() => {
+      try {
+        if (typeof window !== "undefined") {
+          const devId = getDeviceId();
+          const saved = localStorage.getItem(`groky_user_auth_${devId}`) || localStorage.getItem("groky_user_auth");
+          if (saved) return JSON.parse(saved);
+        }
+      } catch {}
+      return null;
+    })();
+    const accountEmail = savedUserAuth?.email || "guest";
+    const saved = loadConversations(accountEmail);
+    const freshId = `conv-${Date.now()}`;
+    const freshChat: Conversation = {
+      id: freshId,
+      title: "New Chat",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isPinned: false,
+      modelId: FREE_DEFAULT_MODEL,
+      messages: [],
+    };
+    if (saved && saved.length > 0) {
+      const sanitizedSaved = saved.map((c) => {
+        const modelObj = activeModels.find((m) => m.id === c.modelId) || DEFAULT_MODELS.find((m) => m.id === c.modelId);
+        if (!c.modelId || modelObj?.isLocked) {
+          return { ...c, modelId: FREE_DEFAULT_MODEL };
+        }
+        return c;
+      });
+      return [freshChat, ...sanitizedSaved.filter((c) => c.messages.length > 0)];
+    }
+    return [freshChat];
+  });
+
+  const [activeId, setActiveId] = useState<string>(() => {
+    return conversations[0]?.id || `conv-${Date.now()}`;
+  });
+
+  // Helper to load isolated conversation history for the given user account
+  const loadConversationsForAccount = async (user: UserAuth | null) => {
+    const accountEmail = user?.email || "guest";
+    const localSaved = loadConversations(accountEmail);
+    const freshId = `conv-${Date.now()}`;
+    const freshChat: Conversation = {
+      id: freshId,
+      title: "New Chat",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isPinned: false,
+      modelId: FREE_DEFAULT_MODEL,
+      messages: [],
+    };
+
+    let initialConvs: Conversation[] = [freshChat];
+    if (localSaved && localSaved.length > 0) {
+      const filtered = localSaved.filter((c) => c.messages && c.messages.length > 0);
+      initialConvs = [freshChat, ...filtered];
+    }
+    setConversations(initialConvs);
+    setActiveId(initialConvs[0].id);
+
+    // If user is logged in, fetch this account's cloud conversations from Firestore
+    if (user?.isLoggedIn) {
+      try {
+        const remoteConvs = await fetchConversationsFromFirestore();
+        if (remoteConvs && remoteConvs.length > 0) {
+          const mergedRemote = [freshChat, ...remoteConvs];
+          setConversations(mergedRemote);
+          saveConversations(mergedRemote, accountEmail);
+          setActiveId(mergedRemote[0].id);
+        }
+      } catch (err) {
+        console.warn("Firestore conversation fetch error:", err);
+      }
+    }
+  };
+
+  // Automatically persist conversations to the active user's isolated storage
+  useEffect(() => {
+    if (conversations.length > 0) {
+      saveConversations(conversations, userAuth?.email);
+    }
+  }, [conversations, userAuth?.email]);
 
   const [settings, setSettings] = useState<UserSettings>(loadSettings);
   const [viewMode, setViewMode] = useState<"chat" | "settings">("chat");
@@ -145,12 +257,98 @@ export default function App() {
   const [previewFile, setPreviewFile] = useState<AttachedFile | null>(null);
   const [isDeviceMemoryOpen, setIsDeviceMemoryOpen] = useState(false);
   const [deviceMemories, setDeviceMemories] = useState<MemoryItem[]>(() => loadDeviceMemory());
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  
+  // Initial Login Modal State (only opens at startup if user is NOT logged in or reset_token is in URL)
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("reset_token")) {
+          return true;
+        }
+        const devId = getDeviceId();
+        const storedAuth = localStorage.getItem(`groky_user_auth_${devId}`) || localStorage.getItem("groky_user_auth");
+        if (storedAuth) {
+          const parsed = JSON.parse(storedAuth);
+          if (parsed && parsed.isLoggedIn) {
+            return false;
+          }
+        }
+        return true;
+      }
+    } catch {}
+    return true;
+  });
+
+  const handleLoginSuccess = async (user: UserAuth) => {
+    setUserAuth(user);
+    setViewMode("chat");
+    try {
+      const devId = getDeviceId();
+      localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(user));
+      localStorage.setItem("groky_user_auth", JSON.stringify(user));
+      localStorage.setItem(`groky_last_view_mode_${devId}`, "chat");
+    } catch {}
+
+    await loadConversationsForAccount(user);
+
+    fetchMemoriesFromFirestore()
+      .then((remoteMems) => {
+        if (remoteMems && remoteMems.length > 0) {
+          setDeviceMemories(remoteMems);
+          saveDeviceMemory(remoteMems, user.email);
+        }
+      })
+      .catch(() => {});
+    setIsLoginModalOpen(false);
+  };
+
+  const handleCloseLoginModal = () => {
+    try {
+      sessionStorage.setItem("groky_login_dismissed", "true");
+    } catch {}
+    setIsLoginModalOpen(false);
+  };
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const rafRenderIdRef = useRef<number | null>(null);
   const currentAccumulatedTextRef = useRef<string>("");
   const displayedLengthRef = useRef<number>(0);
   const isStreamActiveRef = useRef<boolean>(false);
+
+  // Validate Firestore Connection on boot (as required by Firebase skill)
+  useEffect(() => {
+    testFirestoreConnection().catch(() => {});
+  }, []);
+
+  // Listen to Firebase Auth state changes
+  useEffect(() => {
+    const unsubscribe = onFirebaseAuthChange((fbUser) => {
+      if (fbUser) {
+        setUserAuth(fbUser);
+        setIsLoginModalOpen(false);
+        try {
+          const devId = getDeviceId();
+          localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(fbUser));
+          localStorage.setItem("groky_user_auth", JSON.stringify(fbUser));
+        } catch {}
+
+        loadConversationsForAccount(fbUser);
+
+        fetchMemoriesFromFirestore()
+          .then((remoteMems) => {
+            if (remoteMems && remoteMems.length > 0) {
+              setDeviceMemories(remoteMems);
+              saveDeviceMemory(remoteMems, fbUser.email);
+            }
+          })
+          .catch((err) => console.warn("Firestore memory sync error:", err));
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Fetch Supabase configuration from backend and sync it to settings
   useEffect(() => {
@@ -208,9 +406,11 @@ export default function App() {
           provider: provider as "google" | "email",
         };
         setUserAuth(authObj);
+        setIsLoginModalOpen(false);
         try {
           const devId = getDeviceId();
           localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(authObj));
+          localStorage.setItem("groky_user_auth", JSON.stringify(authObj));
         } catch {}
         setViewMode("chat");
       }
@@ -230,9 +430,11 @@ export default function App() {
           provider: provider as "google" | "email",
         };
         setUserAuth(authObj);
+        setIsLoginModalOpen(false);
         try {
           const devId = getDeviceId();
           localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(authObj));
+          localStorage.setItem("groky_user_auth", JSON.stringify(authObj));
         } catch {}
         setViewMode("chat");
       } else if (event === "SIGNED_OUT") {
@@ -317,10 +519,13 @@ export default function App() {
     return conversations.find((c) => c.id === activeId) || conversations[0];
   }, [conversations, activeId]);
 
-  // Persist conversations to LocalStorage & Supabase
+  // Persist conversations to LocalStorage, Supabase & Firestore
   useEffect(() => {
     saveConversations(conversations);
-  }, [conversations]);
+    if (firebaseAuth.currentUser && activeConversation) {
+      saveConversationToFirestore(activeConversation).catch(() => {});
+    }
+  }, [conversations, activeConversation]);
 
   // Persist settings
   const handleSaveSettings = (newSettings: UserSettings) => {
@@ -333,14 +538,51 @@ export default function App() {
     handleSaveSettings({ ...settings, theme: nextTheme });
   };
 
+  // Google Sign In via Firebase Auth
+  const handleGoogleLogin = async () => {
+    try {
+      const user = await signInWithGoogle();
+      if (user) {
+        setUserAuth(user);
+        try {
+          const devId = getDeviceId();
+          localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(user));
+        } catch {}
+
+        await loadConversationsForAccount(user);
+      }
+    } catch (err) {
+      console.error("Firebase Google login error:", err);
+    }
+  };
+
+  // Logout handler for Firebase and Supabase
+  const handleLogout = async () => {
+    try {
+      await signOutFirebase();
+    } catch {}
+    const client = getSupabaseClient(settings);
+    if (client) {
+      try {
+        await client.auth.signOut();
+      } catch {}
+    }
+    setUserAuth(null);
+    try {
+      const devId = getDeviceId();
+      localStorage.removeItem(`groky_user_auth_${devId}`);
+      localStorage.removeItem("groky_user_auth");
+    } catch {}
+    await loadConversationsForAccount(null);
+  };
+
   // New Chat (Preserves the user's currently selected model from active conversation or settings)
   const handleNewChat = () => {
     const newId = `conv-${Date.now()}`;
     const preservedModel =
       activeConversation?.modelId ||
       settings.preferredModel ||
-      DEFAULT_MODELS.find((m) => !m.isLocked)?.id ||
-      "thinkingmachines/inkling:free";
+      FREE_DEFAULT_MODEL;
 
     const newConv: Conversation = {
       id: newId,
@@ -365,6 +607,7 @@ export default function App() {
         if (c.id === id) {
           const updated = { ...c, title: newTitle, updatedAt: Date.now() };
           saveConversationToSupabase(updated, settings).catch(() => {});
+          saveConversationToFirestore(updated).catch(() => {});
           return updated;
         }
         return c;
@@ -375,6 +618,7 @@ export default function App() {
   // Delete Conversation
   const handleDeleteConversation = (id: string) => {
     deleteConversationFromSupabase(id, settings).catch(() => {});
+    deleteConversationFromFirestore(id).catch(() => {});
     if (conversations.length <= 1) {
       handleNewChat();
       return;
@@ -394,6 +638,7 @@ export default function App() {
           const nextPinned = !c.isPinned;
           const updated = { ...c, isPinned: nextPinned, updatedAt: Date.now() };
           saveConversationToSupabase(updated, settings).catch(() => {});
+          saveConversationToFirestore(updated).catch(() => {});
           return updated;
         }
         return c;
@@ -410,7 +655,7 @@ export default function App() {
 
   // Select Model
   const handleSelectModel = (modelId: string) => {
-    const chosenModel = DEFAULT_MODELS.find((m) => m.id === modelId);
+    const chosenModel = activeModels.find((m) => m.id === modelId) || DEFAULT_MODELS.find((m) => m.id === modelId);
     if (chosenModel?.isLocked) {
       console.warn("Attempted to select locked model:", chosenModel.name);
       return;
@@ -530,10 +775,10 @@ export default function App() {
     const targetConvId = activeConversation.id;
     let targetModelId = activeConversation.modelId || "thinkingmachines/inkling:free";
 
-    // Guard: Check if model is locked
-    const activeModelObj = DEFAULT_MODELS.find((m) => m.id === targetModelId);
+    // 1. Guard: Check if model is locked for user's active subscription tier
+    const activeModelObj = activeModels.find((m) => m.id === targetModelId);
     if (activeModelObj?.isLocked) {
-      const freeModel = DEFAULT_MODELS.find((m) => !m.isLocked)?.id || "thinkingmachines/inkling:free";
+      const freeModel = activeModels.find((m) => !m.isLocked)?.id || FREE_DEFAULT_MODEL;
       const userMessage: Message = {
         id: `msg-${Date.now()}`,
         role: "user",
@@ -544,7 +789,7 @@ export default function App() {
       const lockedWarning: Message = {
         id: `msg-${Date.now() + 1}`,
         role: "assistant",
-        content: `🔒 **Model ${activeModelObj.name} Terkunci (${activeModelObj.badge})**\n\nModel ini sedang tidak dapat diakses. Sesi chat dialihkan ke model standar **Groky 3.0 Mini**.`,
+        content: `🔒 **Model ${activeModelObj.name} Terkunci (${activeModelObj.lockReason || 'Memerlukan Paket Langganan'})**\n\nUntuk menggunakan model **${activeModelObj.name}**, silakan tingkatkan ke paket langganan yang sesuai di menu Pengaturan. Sesi chat dialihkan ke model standar yang terbuka.`,
         timestamp: Date.now() + 1,
         model: freeModel,
       };
@@ -559,8 +804,110 @@ export default function App() {
             : c
         )
       );
+      setSettingsSubpage("subscription");
       return;
     }
+
+    // 2. Guard: Check Daily Message Quota Limit based on Subscription Tier
+    const currentDailyCount = getDailyMessageCount(userAuth?.email);
+    const maxQuota = getDailyMessageQuota(subscriptionTier);
+
+    if (currentDailyCount >= maxQuota) {
+      const planLabel =
+        subscriptionTier === "pro"
+          ? "Paket Pro"
+          : subscriptionTier === "plus"
+          ? "Paket Plus"
+          : subscriptionTier === "lite"
+          ? "Paket Lite"
+          : "Paket Gratis";
+
+      const userMessage: Message = {
+        id: `msg-${Date.now()}`,
+        role: "user",
+        content: userPrompt,
+        timestamp: Date.now(),
+        files,
+      };
+      const quotaWarning: Message = {
+        id: `msg-${Date.now() + 1}`,
+        role: "assistant",
+        content: `⚠️ **Batas Percakapan Harian Tercapai (${currentDailyCount}/${maxQuota} pesan/hari)**\n\nAnda telah menggunakan kuota harian maksimum sebanyak **${maxQuota} pesan/hari** untuk **${planLabel}**.\n\nSilakan tingkatkan paket langganan Anda di Pengaturan untuk mendapatkan kuota percakapan harian yang lebih besar.`,
+        timestamp: Date.now() + 1,
+      };
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === targetConvId
+            ? { ...c, messages: [...c.messages, userMessage, quotaWarning] }
+            : c
+        )
+      );
+      setSettingsSubpage("subscription");
+      return;
+    }
+
+    // 3. Guard: Check File Upload & Multimodal Vision Permissions based on Subscription Tier
+    if (files && files.length > 0) {
+      if (subscriptionTier === "free") {
+        const userMessage: Message = {
+          id: `msg-${Date.now()}`,
+          role: "user",
+          content: userPrompt,
+          timestamp: Date.now(),
+          files,
+        };
+        const fileWarning: Message = {
+          id: `msg-${Date.now() + 1}`,
+          role: "assistant",
+          content: `📁 **Fitur Unggah Berkas Memerlukan Paket Langganan**\n\nPengiriman berkas dokumen, skrip, dan analisis file memerlukan **Paket Lite, Plus, atau Pro**.\n\nSilakan tingkatkan paket langganan Anda untuk mengunggah berkas.`,
+          timestamp: Date.now() + 1,
+        };
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === targetConvId
+              ? { ...c, messages: [...c.messages, userMessage, fileWarning] }
+              : c
+          )
+        );
+        setSettingsSubpage("subscription");
+        return;
+      }
+
+      const hasMedia = files.some(
+        (f) =>
+          f.type.startsWith("image/") ||
+          f.type.startsWith("video/") ||
+          ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(f.extension || "")
+      );
+
+      if (hasMedia && subscriptionTier === "lite") {
+        const userMessage: Message = {
+          id: `msg-${Date.now()}`,
+          role: "user",
+          content: userPrompt,
+          timestamp: Date.now(),
+          files,
+        };
+        const visionWarning: Message = {
+          id: `msg-${Date.now() + 1}`,
+          role: "assistant",
+          content: `🖼️ **Fitur Multimodal Vision & Analisis Gambar Memerlukan Paket Plus atau Pro**\n\nPaket Lite mendukung analisis berkas dokumen & teks. Untuk menganalisis gambar, screenshot, dan diagram, silakan tingkatkan ke **Paket Plus** atau **Paket Pro**.`,
+          timestamp: Date.now() + 1,
+        };
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === targetConvId
+              ? { ...c, messages: [...c.messages, userMessage, visionWarning] }
+              : c
+          )
+        );
+        setSettingsSubpage("subscription");
+        return;
+      }
+    }
+
+    // Increment daily usage count
+    incrementDailyMessageCount(userAuth?.email);
     const userMessageId = `msg-${Date.now()}`;
     const assistantMessageId = `msg-${Date.now() + 1}`;
 
@@ -634,6 +981,16 @@ export default function App() {
       if (settings.customInstructions && settings.customInstructions.trim()) {
         fullSystemPrompt += `\n\n[Instruksi Khusus dari Pengguna]:\n${settings.customInstructions.trim()}`;
       }
+
+      fullSystemPrompt += `\n\n[Status Akun User & Bandwidth Tier]: ${subscriptionTier.toUpperCase()}\n- Bandwidth prioritas: ${
+        subscriptionTier === "pro"
+          ? "Bandwidth Prioritas VIP (1.000.000 Token Context & Fast Multi-Agent)"
+          : subscriptionTier === "plus"
+          ? "Bandwidth Tinggi (131.000 Token Context & Vision)"
+          : subscriptionTier === "lite"
+          ? "Jalur Prioritas Cepat (Lite Engine)"
+          : "Standar Gratis"
+      }`;
 
       const res = await fetch("/api/chat/stream", {
         method: "POST",
@@ -917,17 +1274,80 @@ export default function App() {
 
   if (viewMode === "settings") {
     return (
-      <Settings
-        settings={settings}
-        onUpdateSettings={handleSaveSettings}
-        onClose={() => setViewMode("chat")}
-        onDeleteHistory={handleDeleteAllConversations}
-        onClearMemory={() => {
-          clearDeviceMemory();
-          setDeviceMemories([]);
-        }}
-        onExportData={handleExportAllData}
-      />
+      <>
+        <Settings
+          settings={settings}
+          onUpdateSettings={handleSaveSettings}
+          onClose={() => {
+            setViewMode("chat");
+            setSettingsSubpage(null);
+          }}
+          onDeleteHistory={handleDeleteAllConversations}
+          onClearMemory={() => {
+            clearDeviceMemory();
+            setDeviceMemories([]);
+          }}
+          onExportData={handleExportAllData}
+          userAuth={userAuth}
+          onUpdateUserAuth={(newUser) => {
+            setUserAuth(newUser);
+            try {
+              const devId = getDeviceId();
+              localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(newUser));
+              localStorage.setItem("groky_user_auth", JSON.stringify(newUser));
+            } catch {}
+          }}
+          onLogin={() => setIsLoginModalOpen(true)}
+          onLogout={() => setIsLogoutConfirmOpen(true)}
+          subscriptionTier={subscriptionTier}
+          onUpdateSubscription={handleUpdateSubscription}
+          initialSubpage={settingsSubpage}
+        />
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={handleCloseLoginModal}
+          onSuccess={handleLoginSuccess}
+        />
+        {/* Logout Verification Popup Modal */}
+        {isLogoutConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 space-y-4 shadow-none text-center">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl mx-auto shadow-none">
+                <i className="fa-solid fa-right-from-bracket"></i>
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-stone-900 dark:text-stone-100">
+                  Konfirmasi Log Out
+                </h3>
+                <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
+                  Apakah Anda yakin ingin keluar dari akun Groky AI?
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLogoutConfirmOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 text-xs font-semibold transition-colors cursor-pointer shadow-none"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleLogout();
+                    setIsLogoutConfirmOpen(false);
+                    setViewMode("chat");
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-none transition-colors cursor-pointer"
+                >
+                  Ya, Keluar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -963,16 +1383,12 @@ export default function App() {
         onToggleOpen={() => setSidebarOpen(!sidebarOpen)}
         isMobile={isMobile}
         onOpenDeviceMemory={() => setIsDeviceMemoryOpen(true)}
-        onOpenSettings={() => setViewMode("settings")}
-        userAuth={userAuth}
-        onLogout={() => {
-          setUserAuth(null);
-          try {
-            const devId = getDeviceId();
-            localStorage.removeItem(`groky_user_auth_${devId}`);
-            localStorage.removeItem("groky_user_auth");
-          } catch {}
+        onOpenSettings={() => {
+          setSettingsSubpage(null);
+          setViewMode("settings");
         }}
+        userAuth={userAuth}
+        onLogout={() => setIsLogoutConfirmOpen(true)}
       />
 
       {/* Central Chat Arena (Minimalist Claude design with Multi-Agent support) */}
@@ -983,7 +1399,7 @@ export default function App() {
           onSendMessage={handleSendMessage}
           onStopStreaming={handleStopStreaming}
           onEditMessage={handleEditMessage}
-          models={DEFAULT_MODELS}
+          models={activeModels}
           selectedModelId={activeConversation?.modelId || FREE_DEFAULT_MODEL}
           onSelectModel={handleSelectModel}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -993,6 +1409,10 @@ export default function App() {
           activeConversation={activeConversation}
           onTogglePin={handleTogglePinConversation}
           onDeleteConversation={handleDeleteConversation}
+          onOpenPricing={() => {
+            setSettingsSubpage("subscription");
+            setViewMode("settings");
+          }}
         />
       </main>
 
@@ -1035,6 +1455,53 @@ export default function App() {
         file={previewFile}
         onClose={() => setPreviewFile(null)}
       />
+
+      {/* Initial / On-Demand Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={handleCloseLoginModal}
+        onSuccess={handleLoginSuccess}
+      />
+
+      {/* Logout Verification Popup Modal */}
+      {isLogoutConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 space-y-4 shadow-none text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl mx-auto shadow-none">
+              <i className="fa-solid fa-right-from-bracket"></i>
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-stone-900 dark:text-stone-100">
+                Konfirmasi Log Out
+              </h3>
+              <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
+                Apakah Anda yakin ingin keluar dari akun Groky AI?
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsLogoutConfirmOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 text-xs font-semibold transition-colors cursor-pointer shadow-none"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await handleLogout();
+                  setIsLogoutConfirmOpen(false);
+                  setViewMode("chat");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-none transition-colors cursor-pointer"
+              >
+                Ya, Keluar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

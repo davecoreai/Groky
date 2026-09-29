@@ -1,6 +1,8 @@
-import React, { useState } from "react";
-import { UserSettings } from "../types";
-import { AVAILABLE_FONTS, applyAppFont } from "../lib/storage";
+import React, { useState, useRef } from "react";
+import { UserSettings, UserAuth, SubscriptionTier } from "../types";
+import { AVAILABLE_FONTS, applyAppFont, getDeviceId, getSubscriptionPlan, saveSubscriptionPlan, getAccountSubscriptionRecord } from "../lib/storage";
+import { updateUserAvatar } from "../lib/firebase";
+import { SubscriptionCheckout, PlanItem } from "./SubscriptionCheckout";
 
 interface SettingsProps {
   settings: UserSettings;
@@ -9,9 +11,16 @@ interface SettingsProps {
   onDeleteHistory?: () => void;
   onClearMemory?: () => void;
   onExportData?: () => void;
+  userAuth?: UserAuth | null;
+  onUpdateUserAuth?: (newUser: UserAuth) => void;
+  onLogin?: () => void;
+  onLogout?: () => void;
+  subscriptionTier?: SubscriptionTier;
+  onUpdateSubscription?: (tier: SubscriptionTier) => void;
+  initialSubpage?: SettingPageId | null;
 }
 
-type SettingPageId = "personalization" | "font" | "data-control" | "about";
+type SettingPageId = "subscription" | "personalization" | "font" | "data-control";
 
 interface SettingMenuCategory {
   id: SettingPageId;
@@ -23,6 +32,13 @@ interface SettingMenuCategory {
 }
 
 const SETTING_CATEGORIES: SettingMenuCategory[] = [
+  {
+    id: "subscription",
+    label: "Langganan",
+    description: "Tingkatkan ke Paket Lite, Plus, atau Pro",
+    icon: "fa-solid fa-crown",
+    colorClass: "text-amber-500 bg-amber-500/10",
+  },
   {
     id: "personalization",
     label: "Personalisasi & Gaya AI",
@@ -41,16 +57,84 @@ const SETTING_CATEGORIES: SettingMenuCategory[] = [
   {
     id: "data-control",
     label: "Kontrol Data & Privasi",
-    description: "Hapus riwayat obrolan, bersihkan memori, dan ekspor data",
+    description: "Hapus riwayat obrolan, bersihkan memori akun, dan ekspor data",
     icon: "fa-solid fa-database",
     colorClass: "text-rose-500 bg-rose-500/10",
   },
+];
+
+const SUBSCRIPTION_PLANS: PlanItem[] = [
   {
-    id: "about",
-    label: "Tentang Groky AI",
-    description: "Informasi versi, arsitektur multi-agent, dan status sistem",
-    icon: "fa-solid fa-circle-info",
-    colorClass: "text-stone-500 bg-stone-500/10",
+    id: "lite",
+    name: "Paket Lite",
+    price: "Rp 2.000",
+    rawPrice: 2000,
+    period: "/ bulan",
+    headline: "Inferensi Cepat dan Efisien untuk Kebutuhan AI Harian",
+    unlockedModelBadge: "Groky 3.1 Lite",
+    modelHighlight: "Akses prioritas penuh ke Groky 3.1 Lite",
+    aiEngineCriteria: {
+      title: "Kriteria AI & Kemampuan Komputasi",
+      modelUnlocked: "Groky 3.1 Lite",
+      description: "Dioptimalkan untuk tanya jawab cepat, pencarian ide, dan penulisan teks instan tanpa jeda antrean server.",
+      features: [
+        "Akses jalur prioritas ke model Groky 3.1 Lite",
+        "Batas kuota percakapan harian 3x lebih banyak dibanding akun gratis",
+        "Pengiriman dan analisis berkas teks, dokumen ringkas, serta skrip kode",
+        "Penyimpanan riwayat obrolan cloud tanpa batas",
+        "Format teks kaya responsif dengan Markdown dan KaTeX formula",
+      ],
+    },
+  },
+  {
+    id: "plus",
+    name: "Paket Plus",
+    badge: "Paling Populer",
+    isPopular: true,
+    price: "Rp 10.000",
+    rawPrice: 10000,
+    period: "/ bulan",
+    headline: "Membuka Model Groky 3.5 Pro untuk Pemrograman Kompleks",
+    unlockedModelBadge: "Groky 3.5 Pro",
+    modelHighlight: "Membuka Groky 3.5 Pro dan Groky 3.1 Lite",
+    aiEngineCriteria: {
+      title: "Kriteria AI & Kemampuan Komputasi",
+      modelUnlocked: "Groky 3.5 Pro High Performance",
+      description: "Dirancang khusus untuk programmer, insinyur software, dan akademisi yang membutuhkan penalaran logika mendalam serta debugging kode kompleks.",
+      features: [
+        "Terbuka: Model Groky 3.5 Pro High Performance",
+        "Termasuk seluruh akses ke model Groky 3.1 Lite",
+        "Penalaran arsitektur sistem, refactoring kode, dan algoritma kompleks",
+        "Multimodal Vision untuk analisis gambar, diagram teknis, dan screenshot UI",
+        "Eksekusi interaktif Sandbox Artifacts dan pratinjau kode HTML CSS JS",
+        "Jendela konteks luas 131K Token untuk penulisan kode panjang",
+        "Prioritas komputasi tinggi tanpa batasan kuota standar",
+      ],
+    },
+  },
+  {
+    id: "pro",
+    name: "Paket Pro",
+    badge: "Kekuatan Penuh AI",
+    price: "Rp 15.000",
+    rawPrice: 15000,
+    period: "/ bulan",
+    headline: "Membuka Model Unggulan Groky 3.6 Flash dan Seluruh Fitur Flagship",
+    unlockedModelBadge: "Groky 3.6 Flash",
+    modelHighlight: "Membuka SEMUA Model Termasuk Groky 3.6 Flash",
+    aiEngineCriteria: {
+      title: "Kriteria AI & Kemampuan Komputasi",
+      modelUnlocked: "Groky 3.6 Flash Multimodal dan Semua Model",
+      description: "Akses tanpa kompromi ke model multimodal tercanggih bertenaga Gemini API dengan kapasitas konteks raksasa 1.000.000+ Token untuk riset mendalam.",
+      features: [
+        "Terbuka: Model Unggulan Groky 3.6 Flash Google Gemini Next-Gen",
+        "Akses penuh tanpa terkecuali ke SEMUA model: Groky 3.6 Flash, Groky 3.5 Pro, dan Groky 3.1 Lite",
+        "Jendela Konteks Raksasa hingga 1.000.000+ Token untuk riset mendalam",
+        "Multimodal Vision resolusi tinggi untuk pemrosesan dokumen PDF masif",
+        "Dukungan penuh Orkestrasi Multi-Agent terintegrasi dan eksekusi tool otomatis",
+        "Bandwidth prioritas VIP eksklusif dengan latensi inferensi ultra-rendah",
+      ],
+    },
   },
 ];
 
@@ -82,9 +166,25 @@ export const Settings: React.FC<SettingsProps> = ({
   onDeleteHistory,
   onClearMemory,
   onExportData,
+  userAuth,
+  onUpdateUserAuth,
+  onLogin,
+  onLogout,
+  subscriptionTier,
+  onUpdateSubscription,
+  initialSubpage,
 }) => {
   // Current view: null means Main Vertical Menu, SettingPageId means Dedicated Fullscreen Page
-  const [activeSubpage, setActiveSubpage] = useState<SettingPageId | null>(null);
+  const [activeSubpage, setActiveSubpage] = useState<SettingPageId | null>(initialSubpage || null);
+
+  // Active Subscription Plan State (synced with user storage)
+  const [currentTier, setCurrentTier] = useState<SubscriptionTier>(() => {
+    return subscriptionTier || userAuth?.subscriptionTier || settings.subscriptionTier || getSubscriptionPlan(userAuth?.email);
+  });
+
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState<PlanItem | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"qris" | "va" | "instant">("qris");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // Smooth close & transition states
   const [isClosing, setIsClosing] = useState(false);
@@ -94,6 +194,41 @@ export const Settings: React.FC<SettingsProps> = ({
   const [fontCategoryFilter, setFontCategoryFilter] = useState<string>("All");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Handler for activating subscription plan
+  const handleActivatePlan = (planId: SubscriptionTier) => {
+    setIsProcessingPayment(true);
+    setTimeout(() => {
+      setCurrentTier(planId);
+      saveSubscriptionPlan(planId, userAuth?.email);
+      if (onUpdateSubscription) {
+        onUpdateSubscription(planId);
+      }
+      if (userAuth && onUpdateUserAuth) {
+        onUpdateUserAuth({ ...userAuth, subscriptionTier: planId });
+      }
+      onUpdateSettings({ ...settings, subscriptionTier: planId });
+
+      setIsProcessingPayment(false);
+      setSelectedPlanForPayment(null);
+
+      const planObj = SUBSCRIPTION_PLANS.find((p) => p.id === planId);
+      const planName = planObj?.name || "Paket Baru";
+      const modelUnlocked =
+        planId === "pro"
+          ? "Groky 3.6 Flash dan Groky 3.5 Pro"
+          : planId === "plus"
+          ? "Groky 3.5 Pro"
+          : "Groky 3.1 Lite";
+
+      if (planId === "free") {
+        showNotification("Paket akun diubah ke Gratis.");
+      } else {
+        showNotification(`${planName} Aktif! Model ${modelUnlocked} kini terbuka.`);
+      }
+    }, 600);
+  };
 
   // Animated close handler for returning to chat
   const handleAnimatedClose = () => {
@@ -119,6 +254,42 @@ export const Settings: React.FC<SettingsProps> = ({
     setTimeout(() => {
       setSuccessToast(null);
     }, 3000);
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showNotification("Ukuran foto maksimal 5MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      if (userAuth) {
+        const updatedUser: UserAuth = {
+          ...userAuth,
+          avatarUrl: dataUrl,
+        };
+        if (onUpdateUserAuth) {
+          onUpdateUserAuth(updatedUser);
+        }
+        try {
+          await updateUserAvatar(dataUrl);
+          const devId = getDeviceId();
+          localStorage.setItem(`groky_user_auth_${devId}`, JSON.stringify(updatedUser));
+          localStorage.setItem("groky_user_auth", JSON.stringify(updatedUser));
+        } catch (err) {
+          console.warn("Avatar sync error:", err);
+        }
+        showNotification("Foto profil berhasil diperbarui!");
+      }
+    };
+    reader.readAsDataURL(file);
+    // Reset value so same file can be chosen again if needed
+    e.target.value = "";
   };
 
   const handleToneChange = (tone: "Default" | "Ramah" | "Profesional") => {
@@ -236,6 +407,20 @@ export const Settings: React.FC<SettingsProps> = ({
           </div>
         )}
 
+        {/* Full Screen Menu Pembayaran Midtrans Langganan */}
+        {selectedPlanForPayment && (
+          <SubscriptionCheckout
+            selectedPlan={selectedPlanForPayment}
+            allPlans={SUBSCRIPTION_PLANS}
+            userAuth={userAuth}
+            onClose={() => setSelectedPlanForPayment(null)}
+            onSelectPlan={(newPlan) => setSelectedPlanForPayment(newPlan)}
+            onSuccess={(tier) => {
+              handleActivatePlan(tier);
+            }}
+          />
+        )}
+
         {/* Dedicated Page Top Navbar */}
         <header className="flex items-center justify-between px-4 sm:px-8 py-3.5 border-b border-stone-200/90 dark:border-stone-800/90 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md shrink-0 sticky top-0 z-40">
           <div className="flex items-center gap-3">
@@ -257,20 +442,187 @@ export const Settings: React.FC<SettingsProps> = ({
               </h1>
             </div>
           </div>
-
-          <button
-            onClick={handleAnimatedClose}
-            className="flex items-center justify-center w-9 h-9 rounded-xl text-stone-500 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 text-sm font-medium transition-all cursor-pointer active:scale-95"
-            title="Tutup Pengaturan"
-            aria-label="Tutup Pengaturan"
-          >
-            <i className="fa-solid fa-xmark text-xs"></i>
-          </button>
         </header>
 
         {/* Dedicated Page Fullscreen Body */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-8">
-          <div className="max-w-3xl mx-auto space-y-6 pb-24">
+          <div className={`${activeSubpage === "subscription" ? "max-w-5xl" : "max-w-3xl"} mx-auto space-y-6 pb-24`}>
+            {/* SUBPAGE 0: MENU LANGGANAN & PAKET AI */}
+            {activeSubpage === "subscription" && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Header Subtitle & Status */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-stone-900 rounded-3xl p-5 sm:p-6 border border-stone-200/80 dark:border-stone-800/80 shadow-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                        Status Paket Akun Anda
+                      </h2>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-xl sm:text-2xl font-black text-stone-900 dark:text-stone-100 font-serif-editorial">
+                        {currentTier === "pro"
+                          ? "Paket Pro"
+                          : currentTier === "plus"
+                          ? "Paket Plus"
+                          : currentTier === "lite"
+                          ? "Paket Lite"
+                          : "Paket Gratis"}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500 text-stone-950">
+                        {currentTier.toUpperCase()}
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-500 leading-relaxed">
+                      {currentTier === "pro"
+                        ? "Seluruh model termasuk Groky 3.6 Flash dan Groky 3.5 Pro terbuka penuh."
+                        : currentTier === "plus"
+                        ? "Model Groky 3.5 Pro dan Groky 3.1 Lite terbuka penuh. Upgrade ke Pro untuk membuka Groky 3.6 Flash."
+                        : currentTier === "lite"
+                        ? "Model Groky 3.1 Lite terbuka prioritas. Upgrade ke Plus untuk Groky 3.5 Pro, atau Pro untuk Groky 3.6 Flash."
+                        : "Model Groky 3.1 Lite terbuka. Upgrade ke Paket Plus atau Pro untuk membuka model unggulan."}
+                    </p>
+                  </div>
+
+                  {currentTier !== "free" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleActivatePlan("free");
+                        setSuccessToast("Berhasil beralih ke Paket Gratis. Paket langganan yang telah dibeli tetap tersimpan dan dapat digunakan kembali kapan saja selama masa aktif belum habis.");
+                        setTimeout(() => setSuccessToast(null), 5000);
+                      }}
+                      className="px-3.5 py-2 rounded-xl text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs font-medium border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors shrink-0 cursor-pointer"
+                    >
+                      Ubah ke Paket Gratis
+                    </button>
+                  )}
+                </div>
+
+                {/* 3 Pricing Cards Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  {SUBSCRIPTION_PLANS.map((plan) => {
+                    const isCurrent = currentTier === plan.id;
+                    const accountSubRec = getAccountSubscriptionRecord(userAuth?.email);
+                    const purchasedInfo = accountSubRec.purchasedTiers?.[plan.id];
+                    const isPurchasedAndActive = Boolean(purchasedInfo && Date.now() < purchasedInfo.expiresAt);
+
+                    return (
+                      <div
+                        key={plan.id}
+                        className={`relative rounded-3xl p-6 flex flex-col justify-between transition-all ${
+                          isCurrent
+                            ? "bg-white dark:bg-stone-900 border-2 border-emerald-500 shadow-lg shadow-emerald-500/10"
+                            : plan.isPopular
+                            ? "bg-white dark:bg-stone-900 border-2 border-amber-500 shadow-lg shadow-amber-500/10"
+                            : "bg-white dark:bg-stone-900 border border-stone-200/90 dark:border-stone-800/90 shadow-xs"
+                        }`}
+                      >
+                        <div className="space-y-4">
+                          {/* Plan Name & Tagline */}
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100">
+                                {plan.name}
+                              </h3>
+                              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                                {plan.unlockedModelBadge}
+                              </span>
+                            </div>
+                            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+                              {plan.headline}
+                            </p>
+                          </div>
+
+                          {/* Pricing Display */}
+                          <div className="py-2 border-y border-stone-100 dark:border-stone-800">
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-2xl sm:text-3xl font-black text-stone-900 dark:text-stone-100">
+                                {plan.price}
+                              </span>
+                              <span className="text-xs font-semibold text-stone-400">
+                                {plan.period}
+                              </span>
+                            </div>
+                            <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
+                              {plan.modelHighlight}
+                            </p>
+                          </div>
+
+                          {/* AI Criteria & Features */}
+                          <div className="space-y-2.5 pt-1">
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-stone-400">
+                              {plan.aiEngineCriteria.title}
+                            </div>
+                            <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
+                              {plan.aiEngineCriteria.description}
+                            </p>
+
+                            <ul className="space-y-2 pt-1 text-xs text-stone-600 dark:text-stone-300">
+                              {plan.aiEngineCriteria.features.map((feat, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <i className="fa-solid fa-circle-check text-amber-500 text-xs mt-0.5 shrink-0"></i>
+                                  <span className="leading-snug">{feat}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+
+                        {/* Action Button */}
+                        <div className="pt-6">
+                          {isCurrent ? (
+                            <div className="w-full py-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-xs font-bold text-center flex flex-col items-center justify-center gap-1">
+                              <div className="flex items-center gap-1.5">
+                                <i className="fa-solid fa-circle-check text-xs"></i>
+                                <span>Paket Sedang Aktif</span>
+                              </div>
+                              {purchasedInfo && (
+                                <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                                  Masa aktif s/d {new Date(purchasedInfo.expiresAt).toLocaleDateString("id-ID")}
+                                </span>
+                              )}
+                            </div>
+                          ) : isPurchasedAndActive ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleActivatePlan(plan.id);
+                                setSuccessToast(`Berhasil beralih kembali ke ${plan.name}. Paket ini masih aktif s/d ${new Date(purchasedInfo!.expiresAt).toLocaleDateString("id-ID")}.`);
+                                setTimeout(() => setSuccessToast(null), 4000);
+                              }}
+                              className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold text-center flex flex-col items-center justify-center gap-1 transition-all cursor-pointer shadow-md active:scale-98"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <i className="fa-solid fa-bolt text-xs"></i>
+                                <span>Gunakan Kembali Paket Ini</span>
+                              </div>
+                              <span className="text-[10px] font-medium text-emerald-100">
+                                Tanpa bayar lagi (Aktif s/d {new Date(purchasedInfo!.expiresAt).toLocaleDateString("id-ID")})
+                              </span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPlanForPayment(plan)}
+                              className={`w-full py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-98 shadow-none ${
+                                plan.isPopular
+                                  ? "bg-amber-500 hover:bg-amber-400 text-stone-950"
+                                  : "bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-white text-white dark:text-stone-900"
+                              }`}
+                            >
+                              <i className="fa-solid fa-crown text-xs"></i>
+                              <span>Langganan {plan.name}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* SUBPAGE 1: PERSONALISASI & GAYA RESPON AI */}
             {activeSubpage === "personalization" && (
               <div className="space-y-6 animate-in fade-in duration-200">
@@ -283,20 +635,53 @@ export const Settings: React.FC<SettingsProps> = ({
                   </p>
                 </div>
 
+                {/* Mode Berpikir Cepat (Thinking Mode) Toggle */}
+                <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 border border-stone-200/80 dark:border-stone-800/80 shadow-xs flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">
+                        <i className="fa-solid fa-brain"></i>
+                      </div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">
+                        Thinking Mode DeepSeek Style
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        Cepat & Responsif
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-500 leading-relaxed pt-1">
+                      Menampilkan penalaran mendalam di awal sebelum respon jawaban, berpikir cepat dan merespon secepat kilat.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !(settings.thinkingMode ?? true);
+                      onUpdateSettings({ ...settings, thinkingMode: next });
+                      showNotification(next ? "Thinking Mode diaktifkan" : "Thinking Mode dinonaktifkan");
+                    }}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      (settings.thinkingMode ?? true) ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-700"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        (settings.thinkingMode ?? true) ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {/* Gaya Bahasa Cards */}
                 <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 border border-stone-200/80 dark:border-stone-800/80 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">
-                        Gaya & Nada Komunikasi AI
-                      </h3>
-                      <p className="text-xs text-stone-500 mt-0.5">
-                        Pilih nada yang paling sesuai dengan preferensi Anda.
-                      </p>
-                    </div>
-                    <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                      Aktif: {selectedToneObj.label}
-                    </span>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900 dark:text-stone-100">
+                      Gaya & Nada Komunikasi AI
+                    </h3>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      Pilih nada yang paling sesuai dengan preferensi Anda.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
@@ -507,10 +892,10 @@ export const Settings: React.FC<SettingsProps> = ({
                     <div className="space-y-1">
                       <h3 className="text-sm font-bold text-stone-900 dark:text-stone-100 flex items-center gap-2">
                         <i className="fa-solid fa-memory text-amber-500 text-xs"></i>
-                        <span>Bersihkan Memori Jangka Panjang Perangkat</span>
+                        <span>Bersihkan Memori Akun</span>
                       </h3>
                       <p className="text-xs text-stone-500 leading-relaxed">
-                        Menghapus catatan preferensi, konteks pengguna, dan memori kunci-nilai yang disimpan oleh AI untuk perangkat Anda.
+                        Menghapus catatan preferensi, konteks pengguna, dan memori kunci-nilai yang disimpan untuk akun Anda.
                       </p>
                     </div>
 
@@ -548,60 +933,6 @@ export const Settings: React.FC<SettingsProps> = ({
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* SUBPAGE 4: TENTANG GROKY AI & SISTEM */}
-            {activeSubpage === "about" && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div className="space-y-1">
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-stone-900 dark:text-stone-100 font-serif-editorial">
-                    Tentang Groky AI
-                  </h2>
-                  <p className="text-xs sm:text-sm text-stone-500 leading-relaxed">
-                    Platform asisten kecerdasan buatan cerdas dengan arsitektur multi-agent terintegrasi.
-                  </p>
-                </div>
-
-                <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 border border-stone-200/80 dark:border-stone-800/80 shadow-xs space-y-5">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src="https://i.imgur.com/qA2EE5o.jpeg"
-                      alt="Groky AI"
-                      className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-stone-200 dark:border-stone-700"
-                    />
-                    <div>
-                      <h3 className="text-base font-bold text-stone-900 dark:text-stone-100">
-                        Groky AI Assistant
-                      </h3>
-                      <p className="text-xs text-stone-500 mt-0.5">
-                        Versi 3.5.0 • Multi-Agent Gateway Architecture
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
-                    <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/80 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Default Model</span>
-                      <div className="font-bold text-stone-900 dark:text-stone-100">Qwen 3.8 27B / Claude / Gemini</div>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/80 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Rendering Engine</span>
-                      <div className="font-bold text-stone-900 dark:text-stone-100">React 19 + Tailwind CSS</div>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/80 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Streaming Protocol</span>
-                      <div className="font-bold text-stone-900 dark:text-stone-100">Server-Sent Events</div>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-700/80 space-y-1">
-                      <span className="text-[10px] uppercase font-bold text-stone-400">Domain Resmi</span>
-                      <div className="font-bold text-amber-600 dark:text-amber-400">grokyai.web.id</div>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -643,9 +974,159 @@ export const Settings: React.FC<SettingsProps> = ({
 
       {/* Main Fullscreen Vertical List Body */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="max-w-2xl mx-auto space-y-3 pb-20 pt-2">
-          {/* Vertical Settings Cards List */}
-          {SETTING_CATEGORIES.map((cat) => (
+        <div className="max-w-2xl mx-auto space-y-4 pb-20 pt-2">
+          {/* Centered User Profile Card (Flat Minimalist, No Box Shadow) */}
+          <div className="bg-white dark:bg-stone-900 rounded-3xl p-6 sm:p-7 border border-stone-200/90 dark:border-stone-800/90 shadow-none flex flex-col items-center justify-center text-center">
+            {/* Hidden Photo File Input for Custom Profile Photo */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
+
+            {userAuth?.isLoggedIn ? (
+              <div className="flex flex-col items-center">
+                <div className="relative mb-3 group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                  <img
+                    src={userAuth.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"}
+                    alt={userAuth.name || "Foto Profil"}
+                    className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover shadow-none border-2 border-amber-500/40 p-0.5 bg-stone-100 dark:bg-stone-800 transition-opacity group-hover:opacity-90"
+                  />
+                  {/* Camera Icon Badge replacing Google logo */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-stone-900 text-amber-400 border border-stone-700 hover:bg-amber-500 hover:text-stone-950 transition-all flex items-center justify-center text-xs cursor-pointer shadow-none active:scale-95 group-hover:scale-105"
+                    title="Ganti Foto Profil (Pilih Foto)"
+                  >
+                    <i className="fa-solid fa-camera text-[11px]"></i>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100">
+                    {userAuth.name || "Pengguna"}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-[11px] text-amber-500 hover:text-amber-400 font-medium cursor-pointer"
+                    title="Ganti Foto Profil"
+                  >
+                    <i className="fa-solid fa-pen text-[10px]"></i>
+                  </button>
+                </div>
+                
+                <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 font-medium mt-0.5 select-all">
+                  {userAuth.email}
+                </p>
+
+                <div className="flex items-center gap-2 mt-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubpage("subscription")}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-none active:scale-95"
+                  >
+                    <i className="fa-solid fa-crown text-[11px]"></i>
+                    <span>Langganan</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3.5 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 hover:border-amber-500/50 dark:hover:border-amber-500/50 text-stone-700 dark:text-stone-300 hover:text-amber-600 dark:hover:text-amber-400 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-none"
+                  >
+                    <i className="fa-solid fa-camera text-[11px]"></i>
+                    <span>Ubah Foto</span>
+                  </button>
+
+                  {onLogout && (
+                    <button
+                      type="button"
+                      onClick={onLogout}
+                      className="px-3.5 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 hover:border-rose-300 dark:hover:border-rose-900 text-stone-600 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-none"
+                    >
+                      <i className="fa-solid fa-right-from-bracket text-[11px]"></i>
+                      <span>Log Out</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <div
+                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-stone-100 dark:bg-stone-800 border-2 border-dashed border-stone-300 dark:border-stone-700 flex items-center justify-center text-stone-400 text-3xl mb-3 shadow-none cursor-pointer"
+                  onClick={onLogin}
+                >
+                  <i className="fa-solid fa-user"></i>
+                </div>
+                <h3 className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100">
+                  Belum Masuk Akun
+                </h3>
+                <p className="text-xs text-stone-500 mt-1 max-w-xs">
+                  Masuk dengan akun Anda untuk menyinkronkan obrolan antar-perangkat Anda
+                </p>
+                <div className="flex items-center gap-2 mt-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubpage("subscription")}
+                    className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold shadow-none transition-transform active:scale-95 flex items-center gap-2 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-crown text-xs"></i>
+                    <span>Langganan</span>
+                  </button>
+                  {onLogin && (
+                    <button
+                      type="button"
+                      onClick={onLogin}
+                      className="px-4 py-2 rounded-2xl border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-semibold shadow-none transition-transform active:scale-95 flex items-center gap-2 cursor-pointer"
+                    >
+                      <i className="fa-solid fa-arrow-right-to-bracket text-xs"></i>
+                      <span>Masuk Akun</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Dedicated Langganan Banner Card (Appears ONLY when Logged In) */}
+          {userAuth?.isLoggedIn && (
+            <div className="bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-orange-500/15 dark:from-amber-500/20 dark:to-orange-500/20 rounded-3xl p-5 sm:p-6 border border-amber-500/30 shadow-none flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-stone-950 flex items-center justify-center text-xl shrink-0 shadow-xs">
+                  <i className="fa-solid fa-crown"></i>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100">
+                      Langganan
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-stone-950">
+                      {currentTier === "pro" ? "Pro Aktif" : currentTier === "plus" ? "Plus Aktif" : currentTier === "lite" ? "Lite Aktif" : "Mulai Rp 5.000"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveSubpage("subscription")}
+                className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-none shrink-0"
+              >
+                <i className="fa-solid fa-crown text-xs"></i>
+                <span>Langganan</span>
+              </button>
+            </div>
+          )}
+
+          {/* Vertical Settings Cards List (Langganan Category Appears ONLY when Logged In) */}
+          {SETTING_CATEGORIES.filter((cat) => (cat.id === "subscription" ? Boolean(userAuth?.isLoggedIn) : true)).map((cat) => (
             <button
               key={cat.id}
               onClick={() => setActiveSubpage(cat.id)}

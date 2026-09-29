@@ -26,6 +26,9 @@ interface ChatAreaProps {
   activeConversation?: Conversation | null;
   onTogglePin?: (id: string) => void;
   onDeleteConversation?: (id: string) => void;
+  thinkingMode?: boolean;
+  onToggleThinkingMode?: () => void;
+  onOpenPricing?: () => void;
 }
 
 // KaTeX LaTeX formula renderer
@@ -40,6 +43,45 @@ function renderKaTeX(formula: string, displayMode: boolean): string {
     return `<span class="font-mono text-xs text-amber-700 dark:text-amber-400">${formula}</span>`;
   }
 }
+
+const ThinkingBlock: React.FC<{ thinkingText: string; isDone: boolean }> = ({ thinkingText, isDone }) => {
+  const [isOpen, setIsOpen] = useState(!isDone);
+
+  return (
+    <div className="mb-3 rounded-2xl border border-stone-200/80 dark:border-stone-800/80 bg-stone-50/70 dark:bg-stone-900/50 overflow-hidden transition-all text-xs">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-stone-100/60 dark:hover:bg-stone-800/60 transition-colors text-left cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-2 text-stone-700 dark:text-stone-300 font-semibold">
+          <i className="fa-solid fa-brain text-amber-500 text-xs"></i>
+          <span>Proses Berpikir (Thinking)</span>
+          {!isDone ? (
+            <span className="inline-flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-normal animate-pulse">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              Sedang berpikir cepat...
+            </span>
+          ) : (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-200/80 dark:bg-stone-800 text-stone-500 dark:text-stone-400 font-normal">
+              Selesai berpikir
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 text-stone-400">
+          <span className="text-[10px]">{isOpen ? "Sembunyikan" : "Tampilkan"}</span>
+          <i className={`fa-solid fa-chevron-down text-[10px] transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}></i>
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="px-3.5 pb-3 pt-2 border-t border-stone-200/50 dark:border-stone-800/50 text-stone-600 dark:text-stone-400 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text animate-in fade-in duration-150">
+          {thinkingText}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
   messages,
@@ -57,6 +99,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   activeConversation,
   onTogglePin,
   onDeleteConversation,
+  thinkingMode = true,
+  onToggleThinkingMode,
+  onOpenPricing,
 }) => {
   const [inputText, setInputText] = useState("");
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -638,6 +683,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Helper to render markdown parts with LaTeX, tables, headers, and code blocks
   const renderMessageContent = (content: string, messageId: string) => {
+    // DeepSeek-style fast thinking mode: extract <think>...</think>
+    const thinkRegex = /<think>([\s\S]*?)(?:<\/think>|$)/i;
+    const thinkMatch = content.match(thinkRegex);
+    let thinkingText: string | null = null;
+    let actualContent = content;
+    const hasClosedTag = content.includes("</think>");
+
+    if (thinkMatch) {
+      thinkingText = thinkMatch[1].trim();
+      actualContent = content.replace(thinkRegex, "").trim();
+    }
+
     // Regex matches closed code blocks and unclosed/streaming code blocks
     const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)(?:```|$)/g;
 
@@ -645,10 +702,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     let lastIndex = 0;
     let match;
 
-    while ((match = codeBlockRegex.exec(content)) !== null) {
+    while ((match = codeBlockRegex.exec(actualContent)) !== null) {
       let precedingText = "";
       if (match.index > lastIndex) {
-        precedingText = content.slice(lastIndex, match.index);
+        precedingText = actualContent.slice(lastIndex, match.index);
         parts.push({
           type: "text",
           text: precedingText,
@@ -742,14 +799,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       if (match[0].length === 0) break;
     }
 
-    if (lastIndex < content.length) {
+    if (lastIndex < actualContent.length) {
       parts.push({
         type: "text",
-        text: content.slice(lastIndex),
+        text: actualContent.slice(lastIndex),
       });
     }
 
-    return parts.map((part, index) => {
+    const renderedBody = parts.map((part, index) => {
       if (part.type === "code") {
         return (
           <CodeBlock
@@ -946,6 +1003,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         </div>
       );
     });
+
+    return (
+      <div className="space-y-2">
+        {thinkingText && (
+          <ThinkingBlock
+            key={`think-${messageId}`}
+            thinkingText={thinkingText}
+            isDone={hasClosedTag}
+          />
+        )}
+        {actualContent ? renderedBody : null}
+      </div>
+    );
   };
 
   // Inspiring starter prompt suggestions
@@ -1461,6 +1531,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       models={models}
                       selectedModelId={selectedModelId}
                       onSelectModel={onSelectModel}
+                      onOpenPricing={onOpenPricing}
                     />
                   </div>
 

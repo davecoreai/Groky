@@ -1,4 +1,4 @@
-import { Conversation, UserSettings, ModelOption, MemoryItem } from "../types";
+import { Conversation, UserSettings, ModelOption, MemoryItem, SubscriptionTier } from "../types";
 
 const STORAGE_KEYS = {
   CONVERSATIONS: "groky_conversations_v3",
@@ -31,52 +31,191 @@ function getStorageKeys() {
   };
 }
 
-export const DEFAULT_MODELS: ModelOption[] = [
-  {
-    id: "gemini-3.5-flash",
-    name: "Groky 3.6 Flash",
-    provider: "Google Gemini",
-    badge: "Utama",
-    description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
-    maxTokens: 1048576,
-    isLocked: false,
-    supportsVision: true,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "openai/gpt-oss-safeguard-20b",
-    name: "Groky 3.1 Lite",
-    provider: "Groq Cloud",
-    badge: "Groq 20B",
-    description: "Model inferensi ultra-cepat bertenaga Groq API Console dengan pengamanan terintegrasi dan efisiensi tinggi.",
-    maxTokens: 131072,
-    isLocked: false,
-    supportsVision: false,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "openai/gpt-oss-120b",
-    name: "Groky 3.5 Pro",
-    provider: "Groq Cloud",
-    badge: "Groq 120B",
-    description: "Model skala 120B berperforma tinggi via Groq API Console untuk arsitektur software kompleks, pemrograman, dan reasoning mendalam.",
-    maxTokens: 131072,
-    isLocked: false,
-    supportsVision: true,
-    supportsCodeArtifacts: true,
-  },
-  {
-    id: "thinkingmachines/inkling:free",
-    name: "Groky 3.0 Mini",
-    provider: "OpenRouter",
-    badge: "Perbaikan",
-    description: "Model sedang dalam tahap perbaikan sistem dan sementara tidak dapat digunakan.",
-    maxTokens: 131072,
-    isLocked: true,
-    supportsVision: false,
-    supportsCodeArtifacts: true,
-  },
-];
+export interface PurchasedPlanInfo {
+  purchasedAt: number;
+  expiresAt: number;
+}
+
+export interface AccountSubscriptionRecord {
+  activeTier: SubscriptionTier;
+  purchasedTiers: Record<string, PurchasedPlanInfo>;
+}
+
+export function getAccountSubscriptionRecord(userEmail?: string): AccountSubscriptionRecord {
+  if (typeof window === "undefined") {
+    return { activeTier: "free", purchasedTiers: {} };
+  }
+  try {
+    const devId = getDeviceId();
+    const key = userEmail && userEmail.trim()
+      ? `groky_sub_rec_${userEmail.trim().toLowerCase()}`
+      : `groky_sub_rec_guest_${devId}`;
+
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const record: AccountSubscriptionRecord = JSON.parse(raw);
+      // Auto expire if 30 days (/bulan) passed
+      if (record.activeTier !== "free") {
+        const activeInfo = record.purchasedTiers?.[record.activeTier];
+        if (activeInfo && Date.now() > activeInfo.expiresAt) {
+          record.activeTier = "free";
+          localStorage.setItem(key, JSON.stringify(record));
+        }
+      }
+      return record;
+    }
+  } catch {}
+
+  return { activeTier: "free", purchasedTiers: {} };
+}
+
+export function saveAccountSubscriptionRecord(
+  record: AccountSubscriptionRecord,
+  userEmail?: string
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    const devId = getDeviceId();
+    const key = userEmail && userEmail.trim()
+      ? `groky_sub_rec_${userEmail.trim().toLowerCase()}`
+      : `groky_sub_rec_guest_${devId}`;
+
+    localStorage.setItem(key, JSON.stringify(record));
+
+    const legacyKey = userEmail && userEmail.trim()
+      ? `groky_subscription_${userEmail.trim().toLowerCase()}`
+      : `groky_subscription_guest_${devId}`;
+    localStorage.setItem(legacyKey, record.activeTier);
+  } catch {}
+}
+
+export function purchaseOrActivatePlan(tier: SubscriptionTier, userEmail?: string): AccountSubscriptionRecord {
+  const record = getAccountSubscriptionRecord(userEmail);
+  record.activeTier = tier;
+
+  if (tier !== "free") {
+    const existing = record.purchasedTiers?.[tier];
+    if (existing && Date.now() < existing.expiresAt) {
+      // Re-activating unexpired 30-day subscription
+    } else {
+      if (!record.purchasedTiers) record.purchasedTiers = {};
+      record.purchasedTiers[tier] = {
+        purchasedAt: Date.now(),
+        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days (1 month)
+      };
+    }
+  }
+
+  saveAccountSubscriptionRecord(record, userEmail);
+  return record;
+}
+
+export function getSubscriptionPlan(userEmail?: string): SubscriptionTier {
+  const rec = getAccountSubscriptionRecord(userEmail);
+  return rec.activeTier;
+}
+
+export function saveSubscriptionPlan(tier: SubscriptionTier, userEmail?: string): void {
+  purchaseOrActivatePlan(tier, userEmail);
+}
+
+// Daily Message Quota Tracker based on Active Subscription Tier
+export function getDailyMessageQuota(tier: SubscriptionTier = "free"): number {
+  switch (tier) {
+    case "pro":
+      return 1000; // Unlimited / Highest quota
+    case "plus":
+      return 150;
+    case "lite":
+      return 30; // 3x of free quota
+    default:
+      return 10; // Free quota limit
+  }
+}
+
+export function getDailyMessageCount(userEmail?: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : "guest";
+    const key = `groky_daily_msgs_${cleanEmail}_${today}`;
+    return Number(localStorage.getItem(key) || 0);
+  } catch {
+    return 0;
+  }
+}
+
+export function incrementDailyMessageCount(userEmail?: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const cleanEmail = userEmail ? userEmail.trim().toLowerCase() : "guest";
+    const key = `groky_daily_msgs_${cleanEmail}_${today}`;
+    const current = getDailyMessageCount(userEmail);
+    const updated = current + 1;
+    localStorage.setItem(key, String(updated));
+    return updated;
+  } catch {
+    return 0;
+  }
+}
+
+export function getModelsForSubscription(tier: SubscriptionTier = "free"): ModelOption[] {
+  const isPlusOrPro = tier === "plus" || tier === "pro";
+  const isPro = tier === "pro";
+
+  return [
+    {
+      id: "openai/gpt-oss-safeguard-20b",
+      name: "Groky 3.1 Lite",
+      provider: "Groq Cloud",
+      badge: "Gratis & Semua Paket",
+      description: "Model inferensi ultra-cepat bertenaga Groq API Console dengan pengamanan terintegrasi dan efisiensi tinggi.",
+      maxTokens: 131072,
+      isLocked: false,
+      supportsVision: false,
+      supportsCodeArtifacts: true,
+    },
+    {
+      id: "openai/gpt-oss-120b",
+      name: "Groky 3.5 Pro",
+      provider: "Groq Cloud",
+      badge: isPlusOrPro ? (tier === "plus" ? "Plus Aktif" : "Pro Aktif") : "Paket Plus",
+      description: "Model skala 120B berperforma tinggi via Groq API Console untuk arsitektur software kompleks, pemrograman, dan reasoning mendalam.",
+      maxTokens: 131072,
+      isLocked: !isPlusOrPro,
+      lockReason: "Terbuka di Paket Plus dan Pro",
+      supportsVision: true,
+      supportsCodeArtifacts: true,
+    },
+    {
+      id: "gemini-3.5-flash",
+      name: "Groky 3.6 Flash",
+      provider: "Google Gemini",
+      badge: isPro ? "Pro Aktif" : "Paket Pro",
+      description: "Model multimodal mutakhir bertenaga Gemini API dengan latensi super rendah, penalaran mendalam, dan dukungan konteks luas.",
+      maxTokens: 1048576,
+      isLocked: !isPro,
+      lockReason: "Terbuka di Paket Pro",
+      supportsVision: true,
+      supportsCodeArtifacts: true,
+    },
+    {
+      id: "thinkingmachines/inkling:free",
+      name: "Groky 3.0 Mini",
+      provider: "OpenRouter",
+      badge: "Perbaikan",
+      description: "Model sedang dalam tahap perbaikan sistem dan sementara tidak dapat digunakan.",
+      maxTokens: 131072,
+      isLocked: true,
+      lockReason: "Sedang dalam tahap pemeliharaan sistem",
+      supportsVision: false,
+      supportsCodeArtifacts: true,
+    },
+  ];
+}
+
+export const DEFAULT_MODELS: ModelOption[] = getModelsForSubscription("free");
 
 export const AVAILABLE_FONTS = [
   { id: "Plus Jakarta Sans", name: "Plus Jakarta Sans", category: "Sans-Serif" },
@@ -174,6 +313,8 @@ Pahami konteks, tujuan, dan kebutuhan user sebelum menulis kode. Untuk setiap tu
 - Tulis kode yang bersih, modern, aman, modular, scalable, dan mudah dipelihara.
 - Gunakan struktur project yang rapi dan pisahkan component, logic, data, style, dan utility jika diperlukan.
 - Prioritaskan UX/UI yang nyaman, responsif, cepat, accessible, dan intuitif.
+- ATURAN UTAMA ICON & NO EMOJI: Saat membuat website, aplikasi web, komponen UI, atau kode, JANGAN PERNAH MENGGUNAKAN EMOJI (seperti 🚀, 💡, 🔥, 🏠, ⚙️, dll). SELALU GUNAKAN ICON vektor profesional seperti FontAwesome (misal: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"> lalu gunakan <i class="fa-solid fa-house"></i>), Lucide Icons, atau inline SVG yang presisi dan tajam.
+- KEMAMPUAN KODE PANJANG & LENGKAP: Jangan pernah memotong kode di tengah jalan, membuat ringkasan parsial, atau menggunakan placeholder seperti '// ... kode lainnya' atau '/* rest of code */'. Selalu tulis 100% seluruh kode secara lengkap dari baris awal sampai penutup tag/kurung kurawal.
 - Hindari kode berulang, solusi asal jadi, desain generik, dan dependency yang tidak diperlukan.
 - Periksa edge case, error handling, security, performance, compatibility, dan accessibility.
 - Jika kode user memiliki bug, cari akar masalahnya dan berikan perbaikan yang tepat.
@@ -200,6 +341,7 @@ Selalu berusaha memahami maksud user, bukan hanya kata-kata yang mereka tulis. B
   toneStyle: "Default",
   customInstructions: "",
   selectedFont: "Plus Jakarta Sans",
+  thinkingMode: true,
 };
 
 const INITIAL_CONVERSATION: Conversation = {
@@ -392,33 +534,61 @@ Feel free to ask questions, request 3D components, or upload files for analysis!
   ],
 };
 
-export function loadConversations(): Conversation[] {
+export function getAccountStorageKey(accountIdentifier?: string): string {
+  if (!accountIdentifier || accountIdentifier === "guest") {
+    const devId = getDeviceId();
+    return `groky_convs_guest_${devId}`;
+  }
+  const clean = accountIdentifier.toLowerCase().replace(/[^a-z0-9_@.-]/g, "_");
+  return `groky_convs_account_${clean}`;
+}
+
+export function loadConversations(accountIdentifier?: string): Conversation[] {
   try {
-    const keys = getStorageKeys();
-    const raw = localStorage.getItem(keys.CONVERSATIONS);
+    const key = getAccountStorageKey(accountIdentifier);
+    const raw = localStorage.getItem(key);
     if (!raw) {
-      const devId = getDeviceId();
-      const deviceInitialConv: Conversation = {
-        ...INITIAL_CONVERSATION,
-        id: `conv-${devId}-${Date.now().toString(36)}`,
-        modelId: "thinkingmachines/inkling:free",
-      };
-      const initial = [deviceInitialConv];
-      localStorage.setItem(keys.CONVERSATIONS, JSON.stringify(initial));
+      const freshId = `conv-${Date.now()}`;
+      const initial: Conversation[] = [
+        {
+          id: freshId,
+          title: "New Chat",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          isPinned: false,
+          modelId: "gemini-3.5-flash",
+          messages: [],
+        },
+      ];
+      localStorage.setItem(key, JSON.stringify(initial));
       return initial;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [INITIAL_CONVERSATION];
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    const freshId = `conv-${Date.now()}`;
+    return [
+      {
+        id: freshId,
+        title: "New Chat",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isPinned: false,
+        modelId: "gemini-3.5-flash",
+        messages: [],
+      },
+    ];
   } catch (err) {
     console.error("Failed to load conversations from storage", err);
-    return [INITIAL_CONVERSATION];
+    return [];
   }
 }
 
-export function saveConversations(conversations: Conversation[]): void {
+export function saveConversations(conversations: Conversation[], accountIdentifier?: string): void {
   try {
-    const keys = getStorageKeys();
-    localStorage.setItem(keys.CONVERSATIONS, JSON.stringify(conversations));
+    const key = getAccountStorageKey(accountIdentifier);
+    localStorage.setItem(key, JSON.stringify(conversations));
   } catch (err) {
     console.error("Failed to save conversations", err);
   }
@@ -426,8 +596,7 @@ export function saveConversations(conversations: Conversation[]): void {
 
 export function loadActiveChatId(): string {
   try {
-    const keys = getStorageKeys();
-    return localStorage.getItem(keys.ACTIVE_ID) || "conv-welcome-init";
+    return localStorage.getItem("groky_active_chat_id_v3") || "conv-welcome-init";
   } catch {
     return "conv-welcome-init";
   }
@@ -435,17 +604,16 @@ export function loadActiveChatId(): string {
 
 export function saveActiveChatId(id: string): void {
   try {
-    const keys = getStorageKeys();
-    localStorage.setItem(keys.ACTIVE_ID, id);
+    localStorage.setItem("groky_active_chat_id_v3", id);
   } catch (err) {
     console.error("Failed to save active chat ID", err);
   }
 }
 
-export function loadSettings(): UserSettings {
+export function loadSettings(userId?: string): UserSettings {
   try {
-    const keys = getStorageKeys();
-    const raw = localStorage.getItem(keys.SETTINGS);
+    const key = userId ? `groky_account_settings_${userId}` : "groky_user_settings_v3";
+    const raw = localStorage.getItem(key) || localStorage.getItem("groky_user_settings_v3");
     if (!raw) return DEFAULT_SETTINGS;
     return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
   } catch {
@@ -453,25 +621,27 @@ export function loadSettings(): UserSettings {
   }
 }
 
-export function saveSettings(settings: UserSettings): void {
+export function saveSettings(settings: UserSettings, userId?: string): void {
   try {
-    const keys = getStorageKeys();
-    localStorage.setItem(keys.SETTINGS, JSON.stringify(settings));
+    if (userId) {
+      localStorage.setItem(`groky_account_settings_${userId}`, JSON.stringify(settings));
+    }
+    localStorage.setItem("groky_user_settings_v3", JSON.stringify(settings));
   } catch (err) {
     console.error("Failed to save settings", err);
   }
 }
 
-// Device Memory Management (Per-Device Persistence)
-export function getDeviceMemoryKey(): string {
-  const devId = getDeviceId();
-  return `groky_device_memory_${devId}`;
+// Account-Based Memory Management (Persists per User Account, Not per Device)
+export function getAccountMemoryKey(userId?: string): string {
+  if (userId) return `groky_account_memory_${userId}`;
+  return "groky_account_memory_global";
 }
 
-export function loadDeviceMemory(): MemoryItem[] {
+export function loadDeviceMemory(userId?: string): MemoryItem[] {
   try {
-    const key = getDeviceMemoryKey();
-    const raw = localStorage.getItem(key);
+    const key = getAccountMemoryKey(userId);
+    const raw = localStorage.getItem(key) || localStorage.getItem("groky_account_memory_global");
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -480,17 +650,18 @@ export function loadDeviceMemory(): MemoryItem[] {
   }
 }
 
-export function saveDeviceMemory(items: MemoryItem[]): void {
+export function saveDeviceMemory(items: MemoryItem[], userId?: string): void {
   try {
-    const key = getDeviceMemoryKey();
+    const key = getAccountMemoryKey(userId);
     localStorage.setItem(key, JSON.stringify(items));
+    localStorage.setItem("groky_account_memory_global", JSON.stringify(items));
   } catch (err) {
-    console.error("Failed to save device memory", err);
+    console.error("Failed to save account memory", err);
   }
 }
 
-export function addMemoryItem(key: string, value: string): MemoryItem[] {
-  const current = loadDeviceMemory();
+export function addMemoryItem(key: string, value: string, userId?: string): MemoryItem[] {
+  const current = loadDeviceMemory(userId);
   const existingIdx = current.findIndex((m) => m.key.toLowerCase() === key.toLowerCase());
   const newItem: MemoryItem = {
     id: `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -506,27 +677,34 @@ export function addMemoryItem(key: string, value: string): MemoryItem[] {
   } else {
     updated = [newItem, ...current];
   }
-  saveDeviceMemory(updated);
+  saveDeviceMemory(updated, userId);
   return updated;
 }
 
-export function removeMemoryItem(id: string): MemoryItem[] {
-  const current = loadDeviceMemory();
+export function removeMemoryItem(id: string, userId?: string): MemoryItem[] {
+  const current = loadDeviceMemory(userId);
   const updated = current.filter((m) => m.id !== id);
-  saveDeviceMemory(updated);
+  saveDeviceMemory(updated, userId);
   return updated;
 }
 
-export function clearDeviceMemory(): void {
+export function clearDeviceMemory(userId?: string): void {
   try {
-    const key = getDeviceMemoryKey();
+    const key = getAccountMemoryKey(userId);
     localStorage.removeItem(key);
+    localStorage.removeItem("groky_account_memory_global");
   } catch {}
 }
 
-export function getFormattedDeviceMemoryContext(): string {
-  const items = loadDeviceMemory();
+export function getFormattedDeviceMemoryContext(userId?: string): string {
+  const items = loadDeviceMemory(userId);
   if (items.length === 0) return "";
   return items.map((m) => `- ${m.key}: ${m.value}`).join("\n");
 }
+
+// Account Memory Aliases for clean semantic usage
+export const loadAccountMemory = loadDeviceMemory;
+export const saveAccountMemory = saveDeviceMemory;
+export const clearAccountMemory = clearDeviceMemory;
+export const getFormattedAccountMemoryContext = getFormattedDeviceMemoryContext;
 
